@@ -1,0 +1,4 @@
+# Google Sheets API 設定
+SHEET_KEY = '1vMKqE5GMB4IRYrviLQcI7tGGZFnbxyOG1YuukKNeclI'
+SHEET_NAME = 'Departure'
+UPDATE_INTERVAL = 30

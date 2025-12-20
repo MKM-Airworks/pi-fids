@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Pi-FIDS
+Comment=Start Pi-FIDS Flask app and open Chromium in kiosk mode
+Exec=sh -lc 'cd ~/PiFIDS && /usr/bin/python3 fids_display.py & sleep 6 && (chromium-browser || chromium) --kiosk --incognito http://127.0.0.1:8000'
+X-GNOME-Autostart-enabled=true
