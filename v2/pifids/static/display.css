@@ -1,0 +1,25 @@
+/* Display templates inspired by the HAN FIDS references. Manager styling is separate. */
+body[data-view=display]:not(.display-setup){background:#080d19;color:#fff;font-variant-numeric:tabular-nums}
+body[data-view=display]:not(.display-setup) header{background:#102b60;min-height:9vh;padding:0 2.4vw;border-bottom:3px solid #318cff;box-sizing:border-box}
+body[data-view=display]:not(.display-setup) header h1{font-weight:600;font-size:clamp(24px,3.2vw,64px)}
+body[data-view=display]:not(.display-setup) main{display:flex;flex-direction:column;overflow:hidden}
+body[data-view=display]:not(.display-setup) #board{flex:1;height:auto;min-height:0;background:#080d19;color:#fff;overflow:hidden}
+body[data-view=display]:not(.display-setup) .flight-board{table-layout:fixed;background:#080d19;color:#fff;font-size:clamp(22px,2.65vw,52px)}
+body[data-view=display]:not(.display-setup) .flight-board th{background:#164780;color:#fff;font-size:.68em;font-weight:600;padding:1.5vh 2.4vw;border:0}
+body[data-view=display]:not(.display-setup) .flight-board td{height:calc(76vh / var(--page-rows,8));box-sizing:border-box;padding:.7vh 2.4vw;border:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body[data-view=display]:not(.display-setup) .flight-board tbody:nth-of-type(even){background:#183051}
+body[data-view=display]:not(.display-setup) .flight-board th:first-child{width:25%}
+body[data-view=display]:not(.display-setup) .flight-board th:last-child{width:20%}
+body[data-view=display]:not(.display-setup) .flight-board td:last-child{color:#ffe17d}
+#displayFooter{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:1.3vh 2.4vw;background:#102b60;color:#dce8ff;font-size:clamp(14px,1.2vw,24px)}
+.empty-board{display:flex;height:100%;align-items:center;justify-content:center;font-size:clamp(24px,3vw,48px)}
+body[data-view=display]:not(.display-setup) .airline-sign{background:#fff;color:#102b60;padding:3vh 3vw;gap:5vh}
+body[data-view=display]:not(.display-setup) .sign-purpose{letter-spacing:.08em;font-size:clamp(24px,2.3vw,44px)}
+body[data-view=display]:not(.display-setup) .sign-logo{width:88%;height:60%;max-height:none;max-width:none;object-fit:contain}
+body[data-view=display]:not(.display-setup).image-only header,body[data-view=display]:not(.display-setup).image-only #displayFooter{display:none}
+body[data-view=display]:not(.display-setup).image-only .airline-sign{padding:0;gap:0;background:#000}
+body[data-view=display]:not(.display-setup).image-only .sign-image{height:100%;width:100%;flex:none;object-fit:contain}
+.display-setup #displayFooter{margin-top:16px}
+
+body[data-view=display]:not(.display-setup) .has-logo .sign-purpose{display:none}
+body[data-view=display]:not(.display-setup) .has-logo .sign-logo{height:88%;width:92%}
