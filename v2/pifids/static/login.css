@@ -1,0 +1,28 @@
+/* Shared visual identity with Pi-Access Pro's Operations Console login. */
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172a3b;line-height:1.5;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0}
+.login-page{background:#092846 url('/static/branding/airport-bg.png') center 42% / cover no-repeat fixed}
+.login-page::before{content:"";position:fixed;inset:0;background:linear-gradient(135deg,rgb(4 27 52 / 76%),rgb(10 74 116 / 42%));pointer-events:none}
+.login-shell{position:relative;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:1.5rem}
+.login-card{width:min(31rem,100%);border:1px solid rgb(255 255 255 / 70%);border-radius:1.1rem;background:rgb(255 255 255 / 94%);padding:clamp(1.4rem,4vw,2.2rem);box-shadow:0 1.5rem 4rem rgb(0 19 39 / 38%);backdrop-filter:blur(10px)}
+.login-language{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.5rem;margin-bottom:1.1rem;color:#56616f;font-size:.8rem}
+.login-language select{width:auto;padding:.3rem .5rem}
+.login-brand{text-align:center;margin-bottom:1.35rem}
+.login-brand img{display:block;width:min(13rem,62%);height:auto;margin:0 auto}
+.eyebrow{margin:.85rem 0 0;color:#39718f;font-size:.8rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.login-brand h1{margin:.2rem 0 0;color:#0b4168;font-size:clamp(2rem,7vw,2.65rem);line-height:1.1}
+.login-subtitle{margin:.4rem 0 0;color:#56616f;font-weight:700}
+.login-description{margin:0 0 1rem;text-align:center;font-size:.85rem;color:#56616f}
+.login-form{display:grid;gap:1rem}
+.login-form label{display:grid;gap:.4rem;font-size:.9rem;font-weight:600}
+input,select{width:100%;border:1px solid #cbd5e1;border-radius:.4rem;background:#fff;color:#172a3b;font:inherit;padding:.55rem}
+.login-form input{min-height:2.75rem;font:inherit;padding:.5rem}
+.login-form button{min-height:3rem;border:1px solid #0878ad;border-radius:.45rem;background:#56b4e9;color:#06283a;font:inherit;font-weight:700;padding:.55rem .8rem;cursor:pointer}
+.login-form button:hover{background:#72c5f1}
+.login-form button:disabled{opacity:.6;cursor:wait}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #0878ad;outline-offset:3px}
+.operation-message{color:#a62922;margin:.85rem 0 0;font-size:.85rem}
+.operation-message:empty{display:none}
+.login-version{margin:1.35rem 0 0;color:#56616f;font-size:.78rem;text-align:center}
+@media(max-width:480px){.login-shell{padding:1rem}.login-language{font-size:.75rem}}

@@ -27,9 +27,12 @@ def handler(store):
             url = urlparse(self.path)
             files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
+            files['/static/login.css'] = ('static/login.css', 'text/css')
+            files['/static/branding/airport-bg.png'] = ('static/branding/airport-bg.png', 'image/png')
+            files['/static/branding/mkm-airworks-horizontal.png'] = ('static/branding/mkm-airworks-horizontal.png', 'image/png')
             if url.path in files:
                 path, mime = files[url.path]
-                self.send(200, (ROOT / path).read_bytes(), mime + '; charset=utf-8')
+                self.send(200, (ROOT / path).read_bytes(), mime if mime.startswith('image/') else mime + '; charset=utf-8')
             elif url.path == '/api/session':
                 self.send(200, {'authenticated':True, 'airport':None, 'secured':False})
             elif url.path == '/api/feed':
