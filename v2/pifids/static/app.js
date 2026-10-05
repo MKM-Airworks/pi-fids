@@ -184,7 +184,7 @@ let registryState={terminals:[],profiles:[]};
 function namedOptions(id,items,valueKey,blank){
  const select=$(id),old=select.value;select.replaceChildren();
  if(blank!==null){const option=document.createElement('option');option.value='';option.textContent=mt(blank);select.append(option);}
- for(const item of items.filter(item=>item.kind==='legacy'||item.kind===(id==='imageAsset'?'signage':'logo'))){const option=document.createElement('option');option.value=item[valueKey];option.textContent=item.name;select.append(option);}
+ for(const item of items){const option=document.createElement('option');option.value=item[valueKey];option.textContent=item.name;select.append(option);}
  if([...select.options].some(x=>x.value===old))select.value=old;
 }
 async function refreshRegistry(a){
@@ -196,6 +196,8 @@ async function refreshRegistry(a){
  namedOptions('signageTerminal',signageTerminals,'displayId',signageTerminals.length?null:'端末を登録してください');
  namedOptions('signageProfile',registryState.profiles,'name','便一覧');
  $('signageForm').querySelector('button').disabled=!signageTerminals.length;
+ $('signageTerminal').disabled=!signageTerminals.length;
+ $('signageEmpty').hidden=!!signageTerminals.length;
  await signageStatus();
 }
 async function signageStatus(){
@@ -228,7 +230,7 @@ if(manager){
  $('registeredProfile').onchange=()=>{const item=registryState.profiles.find(x=>x.name===$('registeredProfile').value);$('profileForm').reset();$('registeredProfile').value=item?.name||'';if(item)for(const key of ['name','mode','airline','logo','image'])$('profileForm').elements[key].value=item[key];};
  $('profileForm').onsubmit=async event=>{event.preventDefault();try{await post('/api/profiles',{...Object.fromEntries(new FormData(event.target)),airport:$('airport').value});$('message').textContent=mt('表示画面を保存しました。');}catch(error){$('message').textContent=error.message;}};
  $('signageTerminal').onchange=()=>signageStatus().catch(error=>$('message').textContent=error.message);
- $('signageForm').onsubmit=async event=>{event.preventDefault();try{await post('/api/signage',{...Object.fromEntries(new FormData(event.target)),airport:$('airport').value});$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(error){$('message').textContent=error.message;}};
+ $('signageForm').onsubmit=async event=>{event.preventDefault();if(!$('signageTerminal').value){$('message').textContent=mt('端末を登録してください');return;}try{await post('/api/signage',{...Object.fromEntries(new FormData(event.target)),airport:$('airport').value});$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(error){$('message').textContent=error.message;}};
  $('airport').addEventListener('change',()=>{$('displayForm').reset();$('profileForm').reset();$('registeredTerminal').value='';$('registeredProfile').value='';});
 }
 
