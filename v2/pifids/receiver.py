@@ -91,7 +91,7 @@ def receiver_handler(store):
             self.send(403, {'error':'Display receiver is read-only'})
 
         def do_GET(self):
-            if urlparse(self.path).path == '/':
+            if urlparse(self.path).path in ('/', '/api/registry'):
                 return self.send(404, {'error':'Display receiver has no manager UI'})
             return super().do_GET()
     return ReadOnlyHandler

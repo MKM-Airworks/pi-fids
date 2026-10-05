@@ -69,7 +69,7 @@ class LanTests(unittest.TestCase):
         self.denied(401,self.source,path)
         self.denied(403,self.source,'/api/feed?airport=SHI&displayId=gate-01',headers=self.credentials())
         self.denied(403,self.source,'/api/feed?airport=ROR&displayId=other',headers=self.credentials())
-        for forbidden in ('/','/api/state?airport=ROR','/api/assets?airport=ROR','/static/app.js','/display'):
+        for forbidden in ('/','/api/state?airport=ROR','/api/assets?airport=ROR','/api/registry?airport=ROR','/static/app.js','/display'):
             self.denied(404,self.source,forbidden,headers=self.credentials())
         self.denied(405,self.source,'/api/flights',{},self.credentials())
         with self.request(self.source,path,headers=self.credentials()) as response:
@@ -98,6 +98,7 @@ class LanTests(unittest.TestCase):
 
     def test_manager_login_airport_scope_origin_and_logout(self):
         self.denied(401,self.manager,'/api/state?airport=ROR')
+        self.denied(401,self.manager,'/api/registry?airport=ROR')
         self.denied(401,self.manager,'/api/flights',{})
         self.denied(401,self.manager,'/api/login',{'username':'test','password':'wrong'})
         self.denied(403,self.manager,'/api/login',{'username':'test','password':'synthetic-test-password'}, {'Origin':'http://untrusted.example'})
@@ -110,6 +111,9 @@ class LanTests(unittest.TestCase):
             self.assertEqual(response.status,200)
         self.assertEqual(len(self.store.read('ROR')['draft']),1)
         self.denied(403,self.manager,'/api/state?airport=SHI',headers=headers)
+        self.denied(403,self.manager,'/api/registry?airport=SHI',headers=headers)
+        for endpoint in ('/api/terminals','/api/profiles','/api/signage'):
+            self.denied(403,self.manager,endpoint,{'airport':'SHI'},headers)
         self.denied(403,self.manager,'/api/state',headers=headers)
         self.denied(403,self.manager,'/api/flights',{'airport':'SHI'},headers)
         with self.request(self.manager,'/api/logout',{},headers) as response:

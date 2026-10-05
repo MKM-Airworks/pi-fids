@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .store import Store, DraftConflict
+from . import registry
 
 ROOT = Path(__file__).resolve().parent
 
@@ -63,6 +64,11 @@ def handler(store, upstream=None):
                         self.send(200, body, mime)
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
+            elif url.path == '/api/registry':
+                try:
+                    self.send(200, registry.listing(store,parse_qs(url.query).get('airport',['SHI'])[0]))
+                except ValueError as error:
+                    self.send(400, {'error':str(error)})
             elif url.path == '/api/display':
                 try:
                     query = parse_qs(url.query)
@@ -101,6 +107,12 @@ def handler(store, upstream=None):
                     store.change_flight(data, delete=True)
                 elif self.path == '/api/publish':
                     store.publish(data.get('airport'))
+                elif self.path == '/api/terminals':
+                    registry.save_terminal(store,data)
+                elif self.path == '/api/profiles':
+                    registry.save_profile(store,data)
+                elif self.path == '/api/signage':
+                    registry.apply(store,data)
                 elif self.path == '/api/display':
                     store.set_display(data)
                 else:

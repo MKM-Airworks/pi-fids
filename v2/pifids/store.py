@@ -219,6 +219,8 @@ class Store:
             db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))
             db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image', (airport,display_id,*refs))
             db.execute('INSERT INTO displays VALUES (?,?,?,?,1) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=displays.version+1', (airport, display_id, mode, airline))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='terminal_layouts'").fetchone():
+                db.execute('DELETE FROM terminal_layouts WHERE airport=? AND display_id=?',(airport,display_id))
 
     def upload_asset(self, data):
         airport = data.get('airport')
