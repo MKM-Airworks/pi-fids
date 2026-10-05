@@ -24,13 +24,24 @@ def handler(store):
 
         def do_GET(self):
             url = urlparse(self.path)
-            files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/static/style.css': ('static/style.css', 'text/css')}
+            files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/style.css': ('static/style.css', 'text/css')}
             if url.path in files:
                 path, mime = files[url.path]
                 self.send(200, (ROOT / path).read_bytes(), mime + '; charset=utf-8')
             elif url.path == '/api/state':
                 try:
                     self.send(200, store.read(parse_qs(url.query).get('airport', ['SHI'])[0]))
+                except ValueError as error:
+                    self.send(400, {'error': str(error)})
+            elif url.path in ('/api/assets', '/asset'):
+                try:
+                    query = parse_qs(url.query)
+                    airport = query.get('airport', ['SHI'])[0]
+                    if url.path == '/api/assets':
+                        self.send(200, store.assets(airport))
+                    else:
+                        mime, body = store.asset(airport, query.get('id', [''])[0])
+                        self.send(200, body, mime)
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
             elif url.path == '/api/display':
@@ -51,9 +62,11 @@ def handler(store):
                 return self.send(403, {'error': 'Invalid origin'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 16384:
+                if not 0 < size <= (3 * 1024 * 1024 if self.path == '/api/assets' else 16384):
                     raise ValueError('Invalid request size')
                 data = json.loads(self.rfile.read(size))
+                if self.path == '/api/assets':
+                    return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/flights':
                     store.add(data)
                 elif self.path == '/api/publish':

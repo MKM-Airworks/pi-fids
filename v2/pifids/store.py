@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import re
 import json
 import sqlite3
 from pathlib import Path
@@ -31,6 +34,8 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS assets (airport TEXT NOT NULL, digest TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, body BLOB NOT NULL, PRIMARY KEY (airport,digest))')
+            db.execute('CREATE TABLE IF NOT EXISTS display_assets (airport TEXT NOT NULL, display_id TEXT NOT NULL, logo TEXT NOT NULL, image TEXT NOT NULL, PRIMARY KEY (airport,display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS displays (airport TEXT NOT NULL, display_id TEXT NOT NULL, mode TEXT NOT NULL, airline TEXT NOT NULL, version INTEGER NOT NULL, PRIMARY KEY (airport, display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS state (airport TEXT PRIMARY KEY, draft TEXT NOT NULL, published TEXT NOT NULL, version INTEGER NOT NULL)')
             for airport in ('SHI', 'ROR'):
@@ -68,7 +73,9 @@ class Store:
         self.validate_display_id(display_id)
         with self.connect() as db:
             row = db.execute('SELECT mode,airline,version FROM displays WHERE airport=? AND display_id=?', (airport, display_id)).fetchone()
-        return {'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
+        with self.connect() as db:
+            refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
+        return {'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
 
     @staticmethod
     def validate_display_id(display_id):
@@ -86,5 +93,59 @@ class Store:
         if not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Enter airline name')
         airline = airline.strip() if mode != 'board' else ''
+        refs = [data.get(key, '') for key in ('logo', 'image')]
+        for digest in refs:
+            if not isinstance(digest, str):
+                raise ValueError('Invalid image ID')
+            if digest:
+                self.asset(airport, digest)
         with self.connect() as db:
+            db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image', (airport,display_id,*refs))
             db.execute('INSERT INTO displays VALUES (?,?,?,?,1) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=displays.version+1', (airport, display_id, mode, airline))
+
+    def upload_asset(self, data):
+        airport = data.get('airport')
+        self.read(airport)
+        name = data.get('name')
+        if not isinstance(name, str) or not 1 <= len(name) <= 100:
+            raise ValueError('Invalid image name')
+        try:
+            body = base64.b64decode(data.get('body', ''), validate=True)
+        except (ValueError, TypeError):
+            raise ValueError('Invalid image data')
+        if not 0 < len(body) <= 2 * 1024 * 1024:
+            raise ValueError('Image limit: 2 MiB')
+        if body.startswith(b'\x89PNG\r\n\x1a\n') and len(body) >= 24 and body[12:16] == b'IHDR':
+            width = int.from_bytes(body[16:20], 'big')
+            height = int.from_bytes(body[20:24], 'big')
+            if not 0 < width <= 4096 or not 0 < height <= 4096:
+                raise ValueError('PNG dimensions must be 1..4096')
+            mime = 'image/png'
+        elif body.startswith(b'\xff\xd8\xff') and body.endswith(b'\xff\xd9'):
+            mime = 'image/jpeg'
+        else:
+            raise ValueError('PNG or JPEG required')
+        digest = hashlib.sha256(body).hexdigest()
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            count = db.execute('SELECT count(*) FROM assets WHERE airport=?', (airport,)).fetchone()[0]
+            exists = db.execute('SELECT 1 FROM assets WHERE airport=? AND digest=?', (airport,digest)).fetchone()
+            if count >= 30 and not exists:
+                raise ValueError('Prototype limit: 30 images per airport')
+            db.execute('INSERT OR IGNORE INTO assets VALUES (?,?,?,?,?)', (airport,digest,name,mime,body))
+        return digest
+
+    def assets(self, airport):
+        self.read(airport)
+        with self.connect() as db:
+            return [{'digest': r[0], 'name': r[1]} for r in db.execute('SELECT digest,name FROM assets WHERE airport=? ORDER BY name,digest', (airport,))]
+
+    def asset(self, airport, digest):
+        self.read(airport)
+        if not isinstance(digest, str) or not re.fullmatch('[a-f0-9]{64}', digest):
+            raise ValueError('Invalid image ID')
+        with self.connect() as db:
+            row = db.execute('SELECT mime,body FROM assets WHERE airport=? AND digest=?', (airport,digest)).fetchone()
+        if not row:
+            raise ValueError('Image not found for airport')
+        return row
