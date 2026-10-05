@@ -31,6 +31,7 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS displays (airport TEXT NOT NULL, display_id TEXT NOT NULL, mode TEXT NOT NULL, airline TEXT NOT NULL, version INTEGER NOT NULL, PRIMARY KEY (airport, display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS state (airport TEXT PRIMARY KEY, draft TEXT NOT NULL, published TEXT NOT NULL, version INTEGER NOT NULL)')
             for airport in ('SHI', 'ROR'):
                 db.execute('INSERT OR IGNORE INTO state VALUES (?, ?, ?, 0)', (airport, '[]', '[]'))
@@ -61,3 +62,29 @@ class Store:
             raise ValueError('Invalid airport')
         with self.connect() as db:
             db.execute('UPDATE state SET published=draft,version=version+1 WHERE airport=?', (airport,))
+
+    def display(self, airport, display_id):
+        self.read(airport)
+        self.validate_display_id(display_id)
+        with self.connect() as db:
+            row = db.execute('SELECT mode,airline,version FROM displays WHERE airport=? AND display_id=?', (airport, display_id)).fetchone()
+        return {'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
+
+    @staticmethod
+    def validate_display_id(display_id):
+        import re
+        if not isinstance(display_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', display_id):
+            raise ValueError('Invalid display ID')
+
+    def set_display(self, data):
+        airport, display_id = data.get('airport'), data.get('displayId')
+        self.read(airport)
+        self.validate_display_id(display_id)
+        mode, airline = data.get('mode'), data.get('airline', '')
+        if mode not in ('board', 'counter', 'gate'):
+            raise ValueError('Invalid display mode')
+        if not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
+            raise ValueError('Enter airline name')
+        airline = airline.strip() if mode != 'board' else ''
+        with self.connect() as db:
+            db.execute('INSERT INTO displays VALUES (?,?,?,?,1) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=displays.version+1', (airport, display_id, mode, airline))

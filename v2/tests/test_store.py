@@ -5,6 +5,27 @@ from pifids.store import Store, effective_languages, validate
 
 
 class StoreTests(unittest.TestCase):
+    def test_display_switch_isolated_persistent_and_restorable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'data.sqlite'
+            store = Store(path)
+            store.set_display({'airport':'ROR', 'displayId':'gate-01', 'mode':'gate', 'airline':'Sample Air'})
+            self.assertEqual(Store(path).display('ROR', 'gate-01')['airline'], 'Sample Air')
+            self.assertEqual(store.display('SHI', 'gate-01')['mode'], 'board')
+            self.assertEqual(store.display('ROR', 'gate-02')['mode'], 'board')
+            store.set_display({'airport':'ROR', 'displayId':'gate-01', 'mode':'board', 'airline':'Sample Air'})
+            self.assertEqual(store.display('ROR', 'gate-01'), {'displayId':'gate-01', 'mode':'board', 'airline':'', 'version':2})
+
+    def test_invalid_display_instruction_does_not_replace_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'data.sqlite')
+            base = {'airport':'ROR', 'displayId':'gate-01', 'mode':'gate', 'airline':'Sample Air'}
+            store.set_display(base)
+            for patch in ({'airport':'XXX'}, {'displayId':'../bad'}, {'mode':'unknown'}, {'airline':''}):
+                with self.assertRaises(ValueError):
+                    store.set_display({**base, **patch})
+            self.assertEqual(store.display('ROR', 'gate-01')['version'], 1)
+
     def test_draft_isolated_until_publish_and_survives_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'data.sqlite'

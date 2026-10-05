@@ -33,6 +33,12 @@ def handler(store):
                     self.send(200, store.read(parse_qs(url.query).get('airport', ['SHI'])[0]))
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
+            elif url.path == '/api/display':
+                try:
+                    query = parse_qs(url.query)
+                    self.send(200, store.display(query.get('airport', ['SHI'])[0], query.get('displayId', ['default'])[0]))
+                except ValueError as error:
+                    self.send(400, {'error': str(error)})
             else:
                 self.send(404, {'error': 'Not found'})
 
@@ -52,6 +58,8 @@ def handler(store):
                     store.add(data)
                 elif self.path == '/api/publish':
                     store.publish(data.get('airport'))
+                elif self.path == '/api/display':
+                    store.set_display(data)
                 else:
                     return self.send(404, {'error': 'Not found'})
                 self.send(200, {'ok': True})
