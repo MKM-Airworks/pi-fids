@@ -10,7 +10,7 @@ from .store import Store, DraftConflict
 ROOT = Path(__file__).resolve().parent
 
 
-def handler(store):
+def handler(store, upstream=None):
     class Handler(BaseHTTPRequestHandler):
         def send(self, status, body, mime='application/json; charset=utf-8'):
             if not isinstance(body, bytes):
@@ -35,6 +35,12 @@ def handler(store):
                 self.send(200, (ROOT / path).read_bytes(), mime if mime.startswith('image/') else mime + '; charset=utf-8')
             elif url.path == '/api/session':
                 self.send(200, {'authenticated':True, 'airport':None, 'secured':False})
+            elif url.path == '/api/upstream':
+                try:
+                    query = parse_qs(url.query)
+                    self.send(200, upstream.info(query.get('airport',['SHI'])[0],query.get('serviceDate',[None])[0]) if upstream else {'configured':False})
+                except (ValueError, TypeError, KeyError) as error:
+                    self.send(400, {'error':str(error)})
             elif url.path == '/api/feed':
                 try:
                     query = parse_qs(url.query)
@@ -82,6 +88,13 @@ def handler(store):
                     return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/flights':
                     store.add(data)
+                elif self.path in ('/api/upstream/check','/api/upstream/import'):
+                    if upstream is None:
+                        raise ValueError('Web connection is not configured')
+                    if self.path.endswith('/check'):
+                        upstream.fetch(data.get('airport'))
+                    else:
+                        upstream.import_draft(data.get('airport'),data.get('serviceDate'),data.get('expectedDraftRevision'),data.get('webVersion'))
                 elif self.path == '/api/flights/update':
                     store.change_flight(data)
                 elif self.path == '/api/flights/delete':
@@ -95,7 +108,7 @@ def handler(store):
                 self.send(200, {'ok': True})
             except DraftConflict as error:
                 self.send(409, {'error': str(error)})
-            except (ValueError, TypeError, AttributeError) as error:
+            except (ValueError, TypeError, AttributeError, KeyError) as error:
                 self.send(400, {'error': str(error)})
     return Handler
 
@@ -105,18 +118,25 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8800)
     parser.add_argument('--database', default=str(Path.home() / '.pifids-v2' / 'prototype.sqlite'))
     parser.add_argument('--auth-config', help='Local manager login and terminal credentials file')
+    parser.add_argument('--upstream-config', help='Private MKM Flight Web connection JSON')
     parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
     parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
     if args.lan_port and not args.auth_config:
         parser.error('LAN feed requires --auth-config')
     store = Store(args.database)
-    management = handler(store)
+    upstream = None
+    if args.upstream_config:
+        from .upstream import Upstream
+        upstream = Upstream(store,args.upstream_config)
+    management = handler(store,upstream)
     if args.auth_config:
         from .security import Security
         from .lan import manager_handler, feed_handler
         security = Security(args.auth_config)
-        management = manager_handler(store, security)
+        if upstream and upstream.connection()[1]['stationAirport'] != security.config()['airport']:
+            parser.error('Manager and Web connection airport must match')
+        management = manager_handler(store, security,upstream)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
     if args.lan_port:
         lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, security))

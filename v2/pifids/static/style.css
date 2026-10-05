@@ -27,3 +27,5 @@ body[data-view=display]:not(.display-setup) .sign-with-image p{font-size:clamp(2
 body[data-view=display]:not(.display-setup):fullscreen{cursor:none}
 
 .kiosk-display #displayControls{display:none}.kiosk-display{cursor:none}
+
+body[data-view=manager] #draft,body[data-view=manager] #published,body[data-view=manager] #upstreamPreview{overflow-x:auto}body[data-view=manager] th,body[data-view=manager] td{padding:12px;font-size:.9rem}body[data-view=manager] #upstreamPanel{border:1px solid #bbc8d2;border-radius:8px;background:white;padding:16px;margin-top:24px}

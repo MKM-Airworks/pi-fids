@@ -5,8 +5,8 @@ from urllib.parse import parse_qs, urlparse
 from .__main__ import ROOT, handler
 
 
-def manager_handler(store, security):
-    class ManagerHandler(handler(store)):
+def manager_handler(store, security, upstream=None):
+    class ManagerHandler(handler(store, upstream)):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == '/login':
@@ -23,7 +23,7 @@ def manager_handler(store, security):
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 return
-            scoped_paths = ('/api/state', '/api/assets', '/api/feed', '/api/display', '/asset', '/display')
+            scoped_paths = ('/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
                 return self.send(403, {'error':'Airport access denied'})
