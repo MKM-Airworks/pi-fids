@@ -2,4 +2,28 @@
 
 .airline-sign{text-align:center;padding:64px 24px;background:white}.airline-sign h2{font-size:64px}.airline-sign p{font-size:32px}
 
-.sign-logo{max-width:360px;max-height:180px;object-fit:contain}.sign-image{display:block;width:100%;max-height:65vh;object-fit:contain}.airline-sign:has(.sign-image){padding:16px}.airline-sign:has(.sign-image) h2{font-size:28px}
+.sign-logo{max-width:360px;max-height:180px;object-fit:contain}.sign-image{display:block;width:100%;max-height:65vh;object-fit:contain}.airline-sign.sign-with-image{padding:16px}.airline-sign.sign-with-image h2{font-size:28px}
+
+/* Passenger display fills the screen; setup is an explicit operator view. */
+body[data-view=display]:not(.display-setup){height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:#102d47}
+body[data-view=display]:not(.display-setup) header{flex:0 0 auto;padding:2vh 2vw}
+body[data-view=display]:not(.display-setup) header h1{margin:0;font-size:clamp(24px,3vw,56px)}
+body[data-view=display]:not(.display-setup) #clock{font-size:clamp(18px,2vw,36px);white-space:nowrap}
+body[data-view=display]:not(.display-setup) main{flex:1;min-height:0;max-width:none;width:100%;box-sizing:border-box;padding:0;overflow:auto}
+body[data-view=display]:not(.display-setup) #board{height:100%;min-height:0;color:#172a3b;background:#f1f5f8}
+body[data-view=display]:not(.display-setup) .setup-only{display:none}
+body[data-view=display]:not(.display-setup) table{margin:0;font-size:clamp(24px,2.8vw,52px)}
+body[data-view=display]:not(.display-setup) th,body[data-view=display]:not(.display-setup) td{padding:2vh 2vw}
+body[data-view=display]:not(.display-setup) .airline-sign{height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2vh 2vw;gap:2vh}
+body[data-view=display]:not(.display-setup) .airline-sign h2{font-size:clamp(32px,6vw,110px);margin:0}
+body[data-view=display]:not(.display-setup) .airline-sign p{font-size:clamp(24px,3vw,56px);margin:0}
+body[data-view=display]:not(.display-setup) .sign-image{flex:1;min-height:0;max-height:none;width:100%;object-fit:contain}
+body[data-view=display]:not(.display-setup) .sign-logo{max-height:20vh;max-width:40vw}
+body[data-view=display]:not(.display-setup) .sign-with-image h2{font-size:clamp(24px,2vw,40px)}
+body[data-view=display]:not(.display-setup) .sign-with-image p{font-size:clamp(20px,1.6vw,32px)}
+#displayControls{position:fixed;right:16px;bottom:12px;z-index:10;background:#102d47;color:white;padding:0 12px;border-radius:8px}
+#displayControls a{color:white;margin-left:12px}#fullscreenMessage{display:block;max-width:420px}
+.is-fullscreen #displayControls{display:none}
+body[data-view=display]:not(.display-setup):fullscreen{cursor:none}
+
+.kiosk-display #displayControls{display:none}.kiosk-display{cursor:none}
