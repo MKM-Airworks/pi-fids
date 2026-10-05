@@ -138,7 +138,7 @@ if(!manager){
  document.body.classList.toggle('display-setup',setup);
  const kiosk=new URLSearchParams(location.search).get('kiosk')==='1';
  document.body.classList.toggle('kiosk-display',kiosk&&!setup);
- const back=$('managerBack'),preview=new URLSearchParams(location.search).get('preview');back.hidden=kiosk||!preview;back.href='/?airport='+encodeURIComponent(airport)+(preview==='screens'?'#screensPanel':'#signagePanel');
+ const back=$('managerBack'),preview=new URLSearchParams(location.search).get('preview');back.hidden=kiosk;back.href='/?airport='+encodeURIComponent(airport)+(preview==='screens'?'#screensPanel':'#signagePanel');
  const setupUrl=new URL(location.href);setupUrl.searchParams.set('setup','1');$('settingsLink').href=setupUrl.href;
  $('fullscreen').onclick=async()=>{try{if(!document.documentElement.requestFullscreen)throw Error('このブラウザでは全画面表示を利用できません。ブラウザの全画面操作を使用してください。');await document.documentElement.requestFullscreen();}catch(error){$('fullscreenMessage').textContent=error.message||'全画面表示を開始できませんでした。';}};
  document.addEventListener('fullscreenchange',()=>document.body.classList.toggle('is-fullscreen',!!document.fullscreenElement));
