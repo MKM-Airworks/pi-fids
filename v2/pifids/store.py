@@ -124,6 +124,18 @@ class Store:
         with self.connect() as db:
             db.execute('UPDATE state SET published=draft,version=version+1 WHERE airport=?', (airport,))
 
+    def feed(self, airport, display_id):
+        if airport not in ('SHI', 'ROR'):
+            raise ValueError('Invalid airport')
+        self.validate_display_id(display_id)
+        with self.connect() as db:
+            db.execute('BEGIN')
+            published, version = db.execute('SELECT published,version FROM state WHERE airport=?', (airport,)).fetchone()
+            display = db.execute('SELECT mode,airline,version FROM displays WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
+            refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
+        return {'airport':airport, 'flights':json.loads(published), 'version':version,
+                'control':{'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
+
     def display(self, airport, display_id):
         self.read(airport)
         self.validate_display_id(display_id)

@@ -112,7 +112,17 @@ async function refreshAssets(a){
 }
 if(manager){$('assetForm').onsubmit=async event=>{event.preventDefault();try{const file=$('assetFile').files[0];if(!file||file.size>2*1024*1024)throw Error(mt('画像は2MBまでです'));const body=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error(mt('画像読込失敗')));reader.readAsDataURL(file);});await post('/api/assets',{airport:$('airport').value,name:file.name,body});$('message').textContent=mt('画像を登録しました。ロゴまたは案内画像を選んで画面に適用してください。');}catch(error){$('message').textContent=error.message;}};}
 
-if(manager){refresh();setInterval(refresh,5000);}else{startDisplay();}
+async function startManager(){
+ try{
+  const response=await fetch('/api/session');if(!response.ok)throw Error('Could not load sign-in status');const session=await response.json();
+  if(!session.authenticated){location.replace('/login');return;}
+  if(session.airport){$('airport').value=session.airport;$('airport').disabled=true;}
+  $('targetDisplay').href='/display?airport='+encodeURIComponent($('airport').value)+'&displayId='+encodeURIComponent($('displayId').value);
+  $('logout').hidden=!session.secured;$('logout').onclick=async()=>{try{await post('/api/logout',{});location.replace('/login');}catch(error){$('message').textContent=error.message;}};
+  await refresh();setInterval(refresh,5000);
+ }catch(error){$('message').textContent=error.message;}
+}
+if(manager){startManager();}else{startDisplay();}
 
 if(!manager){
  const setup=new URLSearchParams(location.search).get('setup')==='1';

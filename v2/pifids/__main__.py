@@ -1,5 +1,6 @@
 import argparse
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -25,9 +26,18 @@ def handler(store):
         def do_GET(self):
             url = urlparse(self.path)
             files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
+            files['/static/login.js'] = ('static/login.js', 'text/javascript')
             if url.path in files:
                 path, mime = files[url.path]
                 self.send(200, (ROOT / path).read_bytes(), mime + '; charset=utf-8')
+            elif url.path == '/api/session':
+                self.send(200, {'authenticated':True, 'airport':None, 'secured':False})
+            elif url.path == '/api/feed':
+                try:
+                    query = parse_qs(url.query)
+                    self.send(200, store.feed(query.get('airport', ['SHI'])[0], query.get('displayId', ['default'])[0]))
+                except ValueError as error:
+                    self.send(400, {'error':str(error)})
             elif url.path == '/api/state':
                 try:
                     self.send(200, store.read(parse_qs(url.query).get('airport', ['SHI'])[0]))
@@ -91,6 +101,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Local-only Pi-FIDS V2 prototype')
     parser.add_argument('--port', type=int, default=8800)
     parser.add_argument('--database', default=str(Path.home() / '.pifids-v2' / 'prototype.sqlite'))
+    parser.add_argument('--auth-config', help='Local manager login and terminal credentials file')
+    parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
+    parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
+    if args.lan_port and not args.auth_config:
+        parser.error('LAN feed requires --auth-config')
+    store = Store(args.database)
+    management = handler(store)
+    if args.auth_config:
+        from .security import Security
+        from .lan import manager_handler, feed_handler
+        security = Security(args.auth_config)
+        management = manager_handler(store, security)
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
+    if args.lan_port:
+        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, security))
+        threading.Thread(target=lan_server.serve_forever, daemon=True).start()
+        print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)
-    ThreadingHTTPServer(('127.0.0.1', args.port), handler(Store(args.database))).serve_forever()
+    server.serve_forever()

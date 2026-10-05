@@ -9,10 +9,11 @@ import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
-from urllib.request import urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from .__main__ import handler
 from .store import Store, validate
+from .security import validate_source
 
 
 class ReceiverStore(Store):
@@ -54,22 +55,31 @@ class ReceiverStore(Store):
             db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image', (airport,display_id,*refs))
 
 
-def sync_once(store, source, airport, display_id):
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        raise ValueError('Feed redirects are not allowed')
+
+
+def sync_once(store, source, airport, display_id, token=None):
+    source = validate_source(source)
+    opener = build_opener(NoRedirect())
     def fetch(path, params, limit):
-        with urlopen(source + path + '?' + urlencode(params), timeout=5) as response:
+        headers = {'Authorization':'Bearer '+token} if token else {}
+        request = Request(source + path + '?' + urlencode(params), headers=headers)
+        with opener.open(request, timeout=5) as response:
             body = response.read(limit + 1)
         if len(body) > limit:
             raise ValueError('Response exceeds limit')
         return body
-    state = json.loads(fetch('/api/state', {'airport':airport}, 256*1024))
-    control = json.loads(fetch('/api/display', {'airport':airport, 'displayId':display_id}, 16384))
+    state = json.loads(fetch('/api/feed', {'airport':airport, 'displayId':display_id}, 256*1024))
+    control = state['control']
     images = {}
     for digest in set([control.get(key, '') for key in ('logo', 'image')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])]):
         if digest:
             try:
                 store.asset(airport, digest)
             except ValueError:
-                images[digest] = fetch('/asset', {'airport':airport, 'id':digest}, 2*1024*1024)
+                images[digest] = fetch('/asset', {'airport':airport, 'displayId':display_id, 'id':digest}, 2*1024*1024)
     store.accept(airport, display_id, state, control, images)
 
 
@@ -87,21 +97,34 @@ def receiver_handler(store):
 
 def main():
     parser = argparse.ArgumentParser(description='Pi-FIDS localhost display receiver prototype')
-    parser.add_argument('--source', required=True)
-    parser.add_argument('--airport', choices=('SHI','ROR'), required=True)
-    parser.add_argument('--display-id', required=True)
+    parser.add_argument('--source')
+    parser.add_argument('--airport', choices=('SHI','ROR'))
+    parser.add_argument('--display-id')
+    parser.add_argument('--connection', help='Terminal-specific connection JSON; token never appears in browser URL')
     parser.add_argument('--port', type=int, default=8801)
     parser.add_argument('--database', default=str(Path.home()/'.pifids-v2'/'receiver.sqlite'))
     args = parser.parse_args()
-    source = urlparse(args.source)
-    if source.scheme not in ('http','https') or not source.hostname or source.username or source.password or source.query or source.fragment or source.path not in ('','/'):
-        parser.error('Source must be an http/https origin')
+    token = None
+    if args.connection:
+        if args.source or args.airport or args.display_id:
+            parser.error('Use --connection alone for source and terminal identity')
+        connection = json.loads(Path(args.connection).read_text(encoding='utf-8'))
+        args.source, args.airport, args.display_id = connection['source'], connection['airport'], connection['displayId']
+        token = connection['token']
+        if not isinstance(token, str) or not 32 <= len(token) <= 128 or not token.isascii() or any(c.isspace() for c in token):
+            parser.error('Invalid terminal credential')
+    if not args.source or args.airport not in ('SHI','ROR') or not args.display_id:
+        parser.error('Provide --connection or --source, --airport and --display-id')
+    try:
+        args.source = validate_source(args.source)
+    except ValueError as error:
+        parser.error(str(error))
     Store.validate_display_id(args.display_id)
     store = ReceiverStore(args.database)
     def poll():
         while True:
             try:
-                sync_once(store,args.source.rstrip('/'),args.airport,args.display_id)
+                sync_once(store,args.source,args.airport,args.display_id,token)
             except Exception as error:
                 logging.warning('Sync failed; keeping disk snapshot: %s', type(error).__name__)
             time.sleep(5)
