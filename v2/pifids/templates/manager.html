@@ -1,0 +1,6 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi-FIDS V2 管理</title><link rel="stylesheet" href="/static/style.css">
+<body data-view="manager"><main><h1>Pi-FIDS V2 管理</h1><p class="notice">開発用・試験情報のみ。本番配信には使用しないでください。</p>
+<label>空港 <select id="airport"><option>SHI</option><option>ROR</option></select></label> <a id="displayLink" href="/display?airport=SHI" target="_blank" rel="noopener">表示画面を開く</a>
+<h2>試験便を追加</h2><form id="flightForm"><label>便名 <input name="flightNumber" required maxlength="100" placeholder="BC101"></label><label>行先 <input name="destination" required maxlength="100" placeholder="Tokyo"></label><label>定刻 <input name="time" type="time" required></label>
+<fieldset><legend>表示言語（選択順に切替・未選択なら端末設定）</legend><div id="languages"></div><p id="languageOrder"></p></fieldset><button>下書きに追加</button></form>
+<p id="message" role="status"></p><h2>下書き</h2><div id="draft"></div><button id="publish">下書きを公開</button><h2>公開済み</h2><div id="published"></div></main><script src="/static/app.js"></script></body></html>

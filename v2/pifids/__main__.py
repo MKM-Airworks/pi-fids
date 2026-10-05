@@ -1,0 +1,69 @@
+import argparse
+import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+from .store import Store
+
+ROOT = Path(__file__).resolve().parent
+
+
+def handler(store):
+    class Handler(BaseHTTPRequestHandler):
+        def send(self, status, body, mime='application/json; charset=utf-8'):
+            if not isinstance(body, bytes):
+                body = json.dumps(body, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            url = urlparse(self.path)
+            files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/static/style.css': ('static/style.css', 'text/css')}
+            if url.path in files:
+                path, mime = files[url.path]
+                self.send(200, (ROOT / path).read_bytes(), mime + '; charset=utf-8')
+            elif url.path == '/api/state':
+                try:
+                    self.send(200, store.read(parse_qs(url.query).get('airport', ['SHI'])[0]))
+                except ValueError as error:
+                    self.send(400, {'error': str(error)})
+            else:
+                self.send(404, {'error': 'Not found'})
+
+        def do_POST(self):
+            # Local prototype: JSON-only requests and same-origin writes.
+            if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+                return self.send(415, {'error': 'JSON required'})
+            origin = self.headers.get('Origin')
+            if origin and origin != 'http://' + self.headers.get('Host', ''):
+                return self.send(403, {'error': 'Invalid origin'})
+            try:
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 16384:
+                    raise ValueError('Invalid request size')
+                data = json.loads(self.rfile.read(size))
+                if self.path == '/api/flights':
+                    store.add(data)
+                elif self.path == '/api/publish':
+                    store.publish(data.get('airport'))
+                else:
+                    return self.send(404, {'error': 'Not found'})
+                self.send(200, {'ok': True})
+            except (ValueError, TypeError, AttributeError) as error:
+                self.send(400, {'error': str(error)})
+    return Handler
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Local-only Pi-FIDS V2 prototype')
+    parser.add_argument('--port', type=int, default=8800)
+    parser.add_argument('--database', default=str(Path.home() / '.pifids-v2' / 'prototype.sqlite'))
+    args = parser.parse_args()
+    print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)
+    ThreadingHTTPServer(('127.0.0.1', args.port), handler(Store(args.database))).serve_forever()
