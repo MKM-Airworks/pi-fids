@@ -22,7 +22,10 @@ def validate(data):
     languages = data.get('languages', [])
     if not isinstance(languages, list) or any(x not in LANGUAGES for x in languages) or len(set(languages)) != len(languages):
         raise ValueError('Invalid languages')
-    return {key: data[key].strip() for key in ('airport', 'flightNumber', 'destination', 'time')} | {'languages': languages}
+    logo = data.get('airlineLogo', '')
+    if not isinstance(logo, str) or (logo and not re.fullmatch('[a-f0-9]{64}', logo)):
+        raise ValueError('Invalid airline logo')
+    return {key: data[key].strip() for key in ('airport', 'flightNumber', 'destination', 'time')} | {'languages': languages, 'airlineLogo': logo}
 
 
 def effective_languages(flight, defaults):
@@ -53,6 +56,8 @@ class Store:
 
     def add(self, data):
         flight = validate(data)
+        if flight['airlineLogo']:
+            self.asset(flight['airport'], flight['airlineLogo'])
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             raw = db.execute('SELECT draft FROM state WHERE airport=?', (flight['airport'],)).fetchone()[0]

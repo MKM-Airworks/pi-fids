@@ -25,6 +25,8 @@ class AssetTests(unittest.TestCase):
             self.assertEqual(Store(path).asset('ROR', digest), ('image/png', png()))
             with self.assertRaises(ValueError):
                 store.asset('SHI', digest)
+            with self.assertRaises(ValueError):
+                store.add({'airport':'SHI','flightNumber':'TEST1','destination':'Tokyo','time':'10:00','airlineLogo':digest})
             store.set_display({'airport':'ROR','displayId':'gate-01','mode':'gate','airline':'Sample','logo':digest})
             self.assertEqual(store.display('ROR','gate-01')['logo'], digest)
             with self.assertRaises(ValueError):

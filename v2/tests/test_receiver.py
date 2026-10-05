@@ -24,3 +24,17 @@ class ReceiverTests(unittest.TestCase):
                 self.assertEqual(restored.read('ROR')['version'],1)
                 self.assertEqual(restored.display('ROR','gate-01')['image'],'')
             self.assertEqual(restored.read('ROR')['draft'],[])
+
+    def test_flight_logos_are_saved_and_missing_logos_block_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store=ReceiverStore(Path(directory)/'receiver.sqlite')
+            digest=hashlib.sha256(png()).hexdigest()
+            flight={'airport':'ROR','flightNumber':'TEST1','destination':'Guam','time':'10:00','airlineLogo':digest}
+            state={'airport':'ROR','version':1,'flights':[flight]}
+            control={'displayId':'board','mode':'board','airline':'','version':0}
+            with self.assertRaises(ValueError):
+                store.accept('ROR','board',state,control,{})
+            self.assertEqual(store.read('ROR')['version'],0)
+            store.accept('ROR','board',state,control,{digest:png()})
+            self.assertEqual(store.read('ROR')['flights'][0]['airlineLogo'],digest)
+            self.assertEqual(store.asset('ROR',digest)[1],png())

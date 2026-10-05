@@ -33,7 +33,7 @@ class ReceiverStore(Store):
         if mode not in ('board', 'counter', 'gate') or not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Invalid display instruction')
         refs = [control.get(key, '') for key in ('logo', 'image')]
-        for digest in refs:
+        for digest in refs + [flight['airlineLogo'] for flight in flights]:
             if not isinstance(digest, str):
                 raise ValueError('Invalid image ID')
             if digest:
@@ -64,8 +64,7 @@ def sync_once(store, source, airport, display_id):
     state = json.loads(fetch('/api/state', {'airport':airport}, 256*1024))
     control = json.loads(fetch('/api/display', {'airport':airport, 'displayId':display_id}, 16384))
     images = {}
-    for key in ('logo', 'image'):
-        digest = control.get(key, '')
+    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])]):
         if digest:
             try:
                 store.asset(airport, digest)

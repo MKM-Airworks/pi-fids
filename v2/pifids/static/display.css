@@ -23,3 +23,7 @@ body[data-view=display]:not(.display-setup).image-only .sign-image{height:100%;w
 
 body[data-view=display]:not(.display-setup) .has-logo .sign-purpose{display:none}
 body[data-view=display]:not(.display-setup) .has-logo .sign-logo{height:88%;width:92%}
+
+body[data-view=display]:not(.display-setup) .flight-board th:first-child{width:32%}
+.flight-logo{display:inline-block;width:8vw;max-height:calc(64vh / var(--page-rows,8));object-fit:contain;vertical-align:middle;margin-right:1.2vw;background:#fff}
+.flight-identity span{vertical-align:middle}
