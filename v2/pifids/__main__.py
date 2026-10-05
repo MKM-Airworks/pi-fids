@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .store import Store
+from .store import Store, DraftConflict
 
 ROOT = Path(__file__).resolve().parent
 
@@ -69,6 +69,10 @@ def handler(store):
                     return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/flights':
                     store.add(data)
+                elif self.path == '/api/flights/update':
+                    store.change_flight(data)
+                elif self.path == '/api/flights/delete':
+                    store.change_flight(data, delete=True)
                 elif self.path == '/api/publish':
                     store.publish(data.get('airport'))
                 elif self.path == '/api/display':
@@ -76,6 +80,8 @@ def handler(store):
                 else:
                     return self.send(404, {'error': 'Not found'})
                 self.send(200, {'ok': True})
+            except DraftConflict as error:
+                self.send(409, {'error': str(error)})
             except (ValueError, TypeError, AttributeError) as error:
                 self.send(400, {'error': str(error)})
     return Handler
