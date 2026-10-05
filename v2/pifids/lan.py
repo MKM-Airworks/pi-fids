@@ -5,8 +5,8 @@ from urllib.parse import parse_qs, urlparse
 from .__main__ import ROOT, handler
 
 
-def manager_handler(store, security, upstream=None):
-    class ManagerHandler(handler(store, upstream)):
+def manager_handler(store, security, upstream=None, os_clock=None):
+    class ManagerHandler(handler(store, upstream, os_clock)):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == '/login':
@@ -23,7 +23,7 @@ def manager_handler(store, security, upstream=None):
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 return
-            scoped_paths = ('/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
+            scoped_paths = ('/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
                 return self.send(403, {'error':'Airport access denied'})
@@ -104,7 +104,7 @@ def feed_handler(store, security):
                 if url.path == '/api/feed':
                     return self.send(200, feed)
                 digest = query.get('id', [''])[0]
-                references = {feed['control']['logo'], feed['control']['image']} | {flight.get('airlineLogo', '') for flight in feed['flights']}
+                references = {feed['control']['logo'], feed['control']['image'], (feed['control'].get('board') or {}).get('logo','')} | {flight.get('airlineLogo', '') for flight in feed['flights']}
                 if not digest or digest not in references:
                     return self.send(403, {'error':'Image is not part of this published display'})
                 mime, body = store.asset(airport, digest)

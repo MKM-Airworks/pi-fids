@@ -20,6 +20,9 @@ def retention(data):
         result[key] = value
     return result
 
+from . import board_config, clock_sync
+from .image_metadata import dimensions
+
 LANGUAGES = ('ja', 'en', 'zh-Hant', 'zh-Hans', 'ko')
 
 
@@ -83,6 +86,9 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS clock_state (id INTEGER PRIMARY KEY,offset REAL NOT NULL,revision INTEGER NOT NULL,last_sync TEXT,source TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS board_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
+            db.execute('CREATE TABLE IF NOT EXISTS asset_kinds (airport TEXT NOT NULL,digest TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(airport,digest))')
             db.execute('CREATE TABLE IF NOT EXISTS display_timing (airport TEXT NOT NULL, display_id TEXT NOT NULL, departure INTEGER NOT NULL, arrival INTEGER NOT NULL, PRIMARY KEY(airport,display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS assets (airport TEXT NOT NULL, digest TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, body BLOB NOT NULL, PRIMARY KEY (airport,digest))')
             db.execute('CREATE TABLE IF NOT EXISTS display_assets (airport TEXT NOT NULL, display_id TEXT NOT NULL, logo TEXT NOT NULL, image TEXT NOT NULL, PRIMARY KEY (airport,display_id))')
@@ -174,8 +180,10 @@ class Store:
             display = db.execute('SELECT mode,airline,version FROM displays WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)
-        return {'airport':airport, 'flights':json.loads(published), 'version':version,
-                'control':{**timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
+            board = board_config.read(db,airport,display_id)
+            clock=clock_sync.info(db)
+        return {'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
+                'control':{'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
 
     def display(self, airport, display_id):
         self.read(airport)
@@ -185,7 +193,8 @@ class Store:
         with self.connect() as db:
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)
-        return {**timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
+            board = board_config.read(db,airport,display_id)
+        return {'board':board, **timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
 
     @staticmethod
     def timing(db, airport, display_id):
@@ -244,20 +253,30 @@ class Store:
             mime = 'image/jpeg'
         else:
             raise ValueError('PNG or JPEG required')
+        kind=data.get('kind','legacy')
+        if kind not in ('legacy','signage','logo'):raise ValueError('Invalid image category')
+        size=dimensions(body)
+        if kind!='legacy' and (not size or not all(0<x<=4096 for x in size)):raise ValueError('Could not verify image dimensions')
+        if kind=='signage' and size!=(1920,1080):raise ValueError('Signage image must be 1920 x 1080 pixels')
         digest = hashlib.sha256(body).hexdigest()
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            prior=db.execute('SELECT kind FROM asset_kinds WHERE airport=? AND digest=?',(airport,digest)).fetchone()
+            if prior and kind!='legacy' and prior[0]!=kind:raise ValueError('Image already registered in another category')
             count = db.execute('SELECT count(*) FROM assets WHERE airport=?', (airport,)).fetchone()[0]
             exists = db.execute('SELECT 1 FROM assets WHERE airport=? AND digest=?', (airport,digest)).fetchone()
             if count >= 30 and not exists:
                 raise ValueError('Prototype limit: 30 images per airport')
             db.execute('INSERT OR IGNORE INTO assets VALUES (?,?,?,?,?)', (airport,digest,name,mime,body))
+            if kind!='legacy':
+                db.execute('INSERT OR REPLACE INTO asset_kinds VALUES (?,?,?)',(airport,digest,kind))
+                db.execute('UPDATE assets SET name=? WHERE airport=? AND digest=?',(name,airport,digest))
         return digest
 
     def assets(self, airport):
         self.read(airport)
         with self.connect() as db:
-            return [{'digest': r[0], 'name': r[1]} for r in db.execute('SELECT digest,name FROM assets WHERE airport=? ORDER BY name,digest', (airport,))]
+            return [{'digest':r[0],'name':r[1],'kind':r[2] or 'legacy'} for r in db.execute('SELECT a.digest,a.name,k.kind FROM assets a LEFT JOIN asset_kinds k ON k.airport=a.airport AND k.digest=a.digest WHERE a.airport=? ORDER BY a.name,a.digest',(airport,))]
 
     def asset(self, airport, digest):
         self.read(airport)
@@ -268,3 +287,7 @@ class Store:
         if not row:
             raise ValueError('Image not found for airport')
         return row
+
+    def clock(self):
+        with self.connect() as db:
+            return clock_sync.info(db)

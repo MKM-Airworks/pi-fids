@@ -36,3 +36,14 @@ test('midnight, future services and offline stale data retain their actual date'
  assert.equal(p.visible([flight({serviceDate:'2026-10-06'})],'departure',{},t('2026-10-05T10:30:00')).length,1);
  assert.equal(p.today(Date.parse('2026-10-05T15:01:00Z')),'2026-10-06');
 });
+test('column choices are independent for departures and arrivals',()=>{
+ const config={departureColumns:['scheduled','flight'],arrivalColumns:['destination','flight','remark']};
+ assert.deepEqual(p.selectedColumns(config,'departure'),['scheduled','flight']);
+ assert.deepEqual(p.selectedColumns(config,'arrival'),['destination','flight','remark']);
+ assert.equal(p.selectedColumns(null,'arrival').length,7);
+});
+test('synchronized clock advances on monotonic time despite host clock difference',()=>{
+ const clock=p.synchronizedClock('2026-10-05T03:00:00Z',1000,500);
+ assert.equal(clock.now(1500),Date.parse('2026-10-05T03:00:01Z'));
+ assert.equal(p.visible([flight()],'departure',{},clock.now(500)).length,0);
+});

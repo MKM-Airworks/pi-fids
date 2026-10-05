@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
@@ -14,6 +15,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .__main__ import handler
 from .store import Store, validate, retention
 from .security import validate_source
+from . import board_config, clock_sync
 
 
 class ReceiverStore(Store):
@@ -30,12 +32,15 @@ class ReceiverStore(Store):
         for version in (state.get('version'), control.get('version')):
             if type(version) is not int or not 0 <= version <= 2147483647:
                 raise ValueError('Invalid version')
+        clock=state.get('clock')
+        if clock is not None:clock_sync.validate(clock)
         timing = retention(control)
+        board = board_config.validate(control.get('board'))
         mode, airline = control.get('mode'), control.get('airline')
         if mode not in ('board', 'counter', 'gate') or not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Invalid display instruction')
         refs = [control.get(key, '') for key in ('logo', 'image')]
-        for digest in refs + [flight['airlineLogo'] for flight in flights]:
+        for digest in refs + ([board['logo']] if board else []) + [flight['airlineLogo'] for flight in flights]:
             if not isinstance(digest, str):
                 raise ValueError('Invalid image ID')
             if digest:
@@ -51,6 +56,8 @@ class ReceiverStore(Store):
             previous = db.execute('SELECT version FROM displays WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             if state['version'] < old or (previous and control['version'] < previous[0]):
                 raise ValueError('Older publication rejected')
+            if clock is not None:clock_sync.accept(db,clock)
+            board_config.write(db,airport,display_id,board)
             db.execute('UPDATE state SET published=?,version=? WHERE airport=?', (json.dumps(flights,ensure_ascii=False),state['version'],airport))
             db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))
             db.execute('INSERT INTO displays VALUES (?,?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=excluded.version', (airport,display_id,mode,airline,control['version']))
@@ -75,13 +82,15 @@ def sync_once(store, source, airport, display_id, token=None):
         return body
     state = json.loads(fetch('/api/feed', {'airport':airport, 'displayId':display_id}, 256*1024))
     control = state['control']
+    clock_delta=clock_sync.validate(state['clock'])-time.time() if state.get('clock') else None
     images = {}
-    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])]):
+    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [(control.get('board') or {}).get('logo','')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])]):
         if digest:
             try:
                 store.asset(airport, digest)
             except ValueError:
                 images[digest] = fetch('/asset', {'airport':airport, 'displayId':display_id, 'id':digest}, 2*1024*1024)
+    if clock_delta is not None:state['clock']['utcNow']=datetime.fromtimestamp(time.time()+clock_delta,timezone.utc).isoformat()
     store.accept(airport, display_id, state, control, images)
 
 

@@ -43,3 +43,5 @@ body[data-view=display]:not(.display-setup) .flight-board td:nth-child(2){color:
 body[data-view=display][data-direction=arrival]:not(.display-setup) header{background:#a51e2b;border-color:#ff6b78}
 body[data-view=display][data-direction=arrival]:not(.display-setup) .flight-board th{background:#941f2d}
 body[data-view=display][data-direction=arrival]:not(.display-setup) #displayFooter{background:#741923}
+body[data-view=display]:not(.display-setup) .flight-board td[data-column=estimated]{color:#ffe17d}
+body[data-view=display]:not(.display-setup) .flight-board td:not([data-column=estimated]){color:#fff}

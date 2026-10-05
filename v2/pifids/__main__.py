@@ -6,12 +6,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .store import Store, DraftConflict
-from . import registry
+from . import registry, clock_sync
 
 ROOT = Path(__file__).resolve().parent
 
 
-def handler(store, upstream=None):
+def handler(store, upstream=None, os_clock=None):
     class Handler(BaseHTTPRequestHandler):
         def send(self, status, body, mime='application/json; charset=utf-8'):
             if not isinstance(body, bytes):
@@ -50,7 +50,7 @@ def handler(store, upstream=None):
                     self.send(400, {'error':str(error)})
             elif url.path == '/api/state':
                 try:
-                    self.send(200, store.read(parse_qs(url.query).get('airport', ['SHI'])[0]))
+                    self.send(200, {**store.read(parse_qs(url.query).get('airport', ['SHI'])[0]),'clock':store.clock()})
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
             elif url.path in ('/api/assets', '/asset'):
@@ -64,6 +64,14 @@ def handler(store, upstream=None):
                         self.send(200, body, mime)
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
+            elif url.path == '/api/clock':
+                result={**store.clock(),'osClockConfigured':os_clock is not None,'osClockAvailable':False}
+                if os_clock:
+                    try:
+                        result['osClockStatus']=os_clock.status();result['osClockAvailable']=True
+                    except ValueError:
+                        result['osClockError']='OS clock service is unavailable'
+                self.send(200,result)
             elif url.path == '/api/registry':
                 try:
                     self.send(200, registry.listing(store,parse_qs(url.query).get('airport',['SHI'])[0]))
@@ -107,6 +115,8 @@ def handler(store, upstream=None):
                     store.change_flight(data, delete=True)
                 elif self.path == '/api/publish':
                     store.publish(data.get('airport'))
+                elif self.path == '/api/clock':
+                    clock_sync.correct_os(store,data,os_clock)
                 elif self.path == '/api/terminals':
                     registry.save_terminal(store,data)
                 elif self.path == '/api/profiles':
@@ -131,9 +141,12 @@ if __name__ == '__main__':
     parser.add_argument('--database', default=str(Path.home() / '.pifids-v2' / 'prototype.sqlite'))
     parser.add_argument('--auth-config', help='Local manager login and terminal credentials file')
     parser.add_argument('--upstream-config', help='Private MKM Flight Web connection JSON')
+    parser.add_argument('--clock-service', help='Private loopback Windows OS clock helper connection JSON')
     parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
     parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
+    if args.clock_service and not args.auth_config:
+        parser.error('OS clock correction requires manager authentication (--auth-config)')
     if args.lan_port and not args.auth_config:
         parser.error('LAN feed requires --auth-config')
     store = Store(args.database)
@@ -141,14 +154,18 @@ if __name__ == '__main__':
     if args.upstream_config:
         from .upstream import Upstream
         upstream = Upstream(store,args.upstream_config)
-    management = handler(store,upstream)
+    os_clock=None
+    if args.clock_service:
+        from .os_clock import OsClock
+        os_clock=OsClock(args.clock_service)
+    management = handler(store,upstream,os_clock)
     if args.auth_config:
         from .security import Security
         from .lan import manager_handler, feed_handler
         security = Security(args.auth_config)
         if upstream and upstream.connection()[1]['stationAirport'] != security.config()['airport']:
             parser.error('Manager and Web connection airport must match')
-        management = manager_handler(store, security,upstream)
+        management = manager_handler(store, security,upstream,os_clock)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
     if args.lan_port:
         lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, security))

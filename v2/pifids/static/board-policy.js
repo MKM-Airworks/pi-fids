@@ -18,7 +18,10 @@
   return flights.filter(flight=>(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
    .sort((a,b)=>effective(a)-effective(b)||a.flightNumber.localeCompare(b.flightNumber));
  }
- const api={today,timestamp,effective,deadline,visible};
+ const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];
+ function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)):[...columns];}
+ function synchronizedClock(utcNow,wallNow=Date.now(),monotonicNow=0){const epoch=Date.parse(utcNow);if(!Number.isFinite(epoch))throw Error('Invalid clock');return {now:mono=>epoch+mono-monotonicNow,offset:epoch-wallNow};}
+ const api={synchronizedClock,today,timestamp,effective,deadline,visible,columns,selectedColumns};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  else root.BoardPolicy=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

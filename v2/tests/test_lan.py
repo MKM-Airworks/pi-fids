@@ -112,7 +112,8 @@ class LanTests(unittest.TestCase):
         self.assertEqual(len(self.store.read('ROR')['draft']),1)
         self.denied(403,self.manager,'/api/state?airport=SHI',headers=headers)
         self.denied(403,self.manager,'/api/registry?airport=SHI',headers=headers)
-        for endpoint in ('/api/terminals','/api/profiles','/api/signage'):
+        self.denied(403,self.manager,'/api/clock?airport=SHI',headers=headers)
+        for endpoint in ('/api/terminals','/api/profiles','/api/signage','/api/clock'):
             self.denied(403,self.manager,endpoint,{'airport':'SHI'},headers)
         self.denied(403,self.manager,'/api/state',headers=headers)
         self.denied(403,self.manager,'/api/flights',{'airport':'SHI'},headers)
