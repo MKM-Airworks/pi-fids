@@ -5,6 +5,16 @@ from pifids.store import Store, effective_languages, validate
 
 
 class StoreTests(unittest.TestCase):
+    def test_operational_fields_and_arrival_direction(self):
+        base={'airport':'ROR','flightNumber':'TEST1','destination':'Tokyo','time':'10:00'}
+        flight=validate({**base,'direction':'arrival','estimatedTime':'10:15','gate':'2','remark':'Delayed'})
+        self.assertEqual(flight['direction'],'arrival')
+        self.assertEqual(flight['estimatedTime'],'10:15')
+        self.assertEqual(validate(base)['direction'],'departure')
+        for patch in ({'direction':'unknown'},{'estimatedTime':'24:00'},{'gate':1},{'remark':'x'*101}):
+            with self.assertRaises(ValueError):
+                validate({**base,**patch})
+
     def test_display_switch_isolated_persistent_and_restorable(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'data.sqlite'

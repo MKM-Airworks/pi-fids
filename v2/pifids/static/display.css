@@ -7,7 +7,7 @@ body[data-view=display]:not(.display-setup) #board{flex:1;height:auto;min-height
 body[data-view=display]:not(.display-setup) .flight-board{table-layout:fixed;background:#080d19;color:#fff;font-size:clamp(22px,2.65vw,52px)}
 body[data-view=display]:not(.display-setup) .flight-board th{background:#164780;color:#fff;font-size:.68em;font-weight:600;padding:1.5vh 2.4vw;border:0}
 body[data-view=display]:not(.display-setup) .flight-board td{height:calc(76vh / var(--page-rows,8));box-sizing:border-box;padding:.7vh 2.4vw;border:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body[data-view=display]:not(.display-setup) .flight-board tbody:nth-of-type(even){background:#183051}
+body[data-view=display]:not(.display-setup) .flight-board tbody tr:nth-child(even){background:#183051}
 body[data-view=display]:not(.display-setup) .flight-board th:first-child{width:25%}
 body[data-view=display]:not(.display-setup) .flight-board th:last-child{width:20%}
 body[data-view=display]:not(.display-setup) .flight-board td:last-child{color:#ffe17d}
@@ -27,3 +27,19 @@ body[data-view=display]:not(.display-setup) .has-logo .sign-logo{height:88%;widt
 body[data-view=display]:not(.display-setup) .flight-board th:first-child{width:32%}
 .flight-logo{display:inline-block;width:8vw;max-height:calc(64vh / var(--page-rows,8));object-fit:contain;vertical-align:middle;margin-right:1.2vw;background:#fff}
 .flight-identity span{vertical-align:middle}
+
+/* Ordered columns: scheduled, estimated, destination/origin, airline, flight, gate, remark. */
+body[data-view=display]:not(.display-setup) .flight-board th{width:auto;padding:1.5vh 1vw;font-size:.63em}
+body[data-view=display]:not(.display-setup) .flight-board td{padding:.7vh 1vw;font-size:.8em}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(1),body[data-view=display]:not(.display-setup) .flight-board th:nth-child(2){width:8%}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(3){width:25%}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(4){width:12%}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(5){width:12%}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(6){width:6%}
+body[data-view=display]:not(.display-setup) .flight-board th:nth-child(7){width:15%}
+body[data-view=display]:not(.display-setup) .flight-board td:last-child{color:#fff}
+body[data-view=display]:not(.display-setup) .flight-board td:nth-child(2){color:#ffe17d}
+.flight-logo{display:block;width:100%;max-width:9vw;margin:0;max-height:calc(64vh / var(--page-rows,8));object-fit:contain;background:#fff}
+body[data-view=display][data-direction=arrival]:not(.display-setup) header{background:#a51e2b;border-color:#ff6b78}
+body[data-view=display][data-direction=arrival]:not(.display-setup) .flight-board th{background:#941f2d}
+body[data-view=display][data-direction=arrival]:not(.display-setup) #displayFooter{background:#741923}

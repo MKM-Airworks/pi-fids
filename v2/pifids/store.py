@@ -25,7 +25,18 @@ def validate(data):
     logo = data.get('airlineLogo', '')
     if not isinstance(logo, str) or (logo and not re.fullmatch('[a-f0-9]{64}', logo)):
         raise ValueError('Invalid airline logo')
-    return {key: data[key].strip() for key in ('airport', 'flightNumber', 'destination', 'time')} | {'languages': languages, 'airlineLogo': logo}
+    direction = data.get('direction', 'departure')
+    if direction not in ('departure', 'arrival'):
+        raise ValueError('Invalid flight direction')
+    extra = {}
+    for key, limit in (('estimatedTime', 5), ('gate', 20), ('remark', 100)):
+        value = data.get(key, '')
+        if not isinstance(value, str) or len(value) > limit:
+            raise ValueError('Invalid ' + key)
+        if key == 'estimatedTime' and value and not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', value):
+            raise ValueError('Estimated time must be HH:mm')
+        extra[key] = value.strip()
+    return {key: data[key].strip() for key in ('airport', 'flightNumber', 'destination', 'time')} | {'languages': languages, 'airlineLogo': logo, 'direction': direction, **extra}
 
 
 def effective_languages(flight, defaults):
