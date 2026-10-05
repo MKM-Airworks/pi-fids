@@ -156,7 +156,7 @@ def project(body, service_date):
     for flight in body['flights']:
         if flight['validFrom'] <= service_date <= flight['validTo'] and day.isoweekday() in flight['operatingDays']:
             stable = json.dumps([*(body[key] for key in SCOPE), flight['id']],separators=(',',':'))
-            row = validate({'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'remark':remark(flight)})
+            row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'remark':remark(flight)})
             rows.append({**row, 'id':hashlib.sha256(stable.encode()).hexdigest()[:32]})
     if len(rows) > 100:
         raise ValueError('Current FIDS limit: 100 daily flights')
@@ -295,7 +295,7 @@ class Upstream:
                     previous = existing.get(flight['id'],{})
                     extras = {key:previous.get(key,flight.get(key,'')) for key in ('airlineLogo','languages')}
                     if old and old[1] == service_date:
-                        extras.update({key:previous[key] for key in ('estimatedTime','gate','remark') if key in previous and previous[key]!=baseline.get(flight['id'],{}).get(key)})
+                        extras.update({key:previous[key] for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','remark') if key in previous and previous[key]!=baseline.get(flight['id'],{}).get(key)})
                     if flight['remark']=='Cancelled':
                         extras['remark']='Cancelled'
                     imported.append({**flight,**extras})

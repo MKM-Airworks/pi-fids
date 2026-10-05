@@ -28,7 +28,7 @@ class StoreTests(unittest.TestCase):
             store.publish('ROR')
             self.assertEqual(Store(path).read('ROR')['flights'], [])
 
-    def test_legacy_draft_migration_preserves_published_data(self):
+    def test_legacy_migration_anchors_date_once(self):
         with tempfile.TemporaryDirectory() as directory:
             import sqlite3
             import json
@@ -38,8 +38,10 @@ class StoreTests(unittest.TestCase):
                 db.execute('CREATE TABLE state (airport TEXT PRIMARY KEY,draft TEXT,published TEXT,version INTEGER)')
                 db.execute('INSERT INTO state VALUES (?,?,?,?)', ('ROR',json.dumps(flights),json.dumps(flights),7))
             migrated = Store(path).read('ROR')
-            self.assertEqual(migrated['flights'], flights)
-            self.assertEqual(migrated['version'], 7)
+            self.assertEqual([{k:v for k,v in row.items() if k!='serviceDate'} for row in migrated['flights']], flights)
+            self.assertEqual(Store(path).read('ROR')['flights'], migrated['flights'])
+            self.assertEqual(migrated['version'], 8)
+            self.assertEqual(Store(path).read('ROR')['version'], 8)
             self.assertEqual(Store(path).read('ROR')['draft'][0]['id'], migrated['draft'][0]['id'])
 
     def test_operational_fields_and_arrival_direction(self):
@@ -61,7 +63,7 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(store.display('SHI', 'gate-01')['mode'], 'board')
             self.assertEqual(store.display('ROR', 'gate-02')['mode'], 'board')
             store.set_display({'airport':'ROR', 'displayId':'gate-01', 'mode':'board', 'airline':'Sample Air'})
-            self.assertEqual(store.display('ROR', 'gate-01'), {'logo':'', 'image':'', 'displayId':'gate-01', 'mode':'board', 'airline':'', 'version':2})
+            self.assertEqual(store.display('ROR', 'gate-01'), {'departureHideMinutes':10, 'arrivalHideMinutes':120, 'logo':'', 'image':'', 'displayId':'gate-01', 'mode':'board', 'airline':'', 'version':2})
 
     def test_invalid_display_instruction_does_not_replace_current(self):
         with tempfile.TemporaryDirectory() as directory:

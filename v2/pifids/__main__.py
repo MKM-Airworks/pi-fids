@@ -25,7 +25,7 @@ def handler(store, upstream=None):
 
         def do_GET(self):
             url = urlparse(self.path)
-            files = {'/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
+            files = {'/static/board-policy.js': ('static/board-policy.js', 'text/javascript'), '/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
             files['/static/login.css'] = ('static/login.css', 'text/css')
             files['/static/branding/airport-bg.png'] = ('static/branding/airport-bg.png', 'image/png')

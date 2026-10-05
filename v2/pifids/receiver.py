@@ -12,7 +12,7 @@ from urllib.parse import urlencode, urlparse
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from .__main__ import handler
-from .store import Store, validate
+from .store import Store, validate, retention
 from .security import validate_source
 
 
@@ -30,6 +30,7 @@ class ReceiverStore(Store):
         for version in (state.get('version'), control.get('version')):
             if type(version) is not int or not 0 <= version <= 2147483647:
                 raise ValueError('Invalid version')
+        timing = retention(control)
         mode, airline = control.get('mode'), control.get('airline')
         if mode not in ('board', 'counter', 'gate') or not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Invalid display instruction')
@@ -51,6 +52,7 @@ class ReceiverStore(Store):
             if state['version'] < old or (previous and control['version'] < previous[0]):
                 raise ValueError('Older publication rejected')
             db.execute('UPDATE state SET published=?,version=? WHERE airport=?', (json.dumps(flights,ensure_ascii=False),state['version'],airport))
+            db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))
             db.execute('INSERT INTO displays VALUES (?,?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=excluded.version', (airport,display_id,mode,airline,control['version']))
             db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image', (airport,display_id,*refs))
 
