@@ -214,7 +214,7 @@ class Upstream:
             try:
                 opener = build_opener(ProxyHandler({}),NoRedirect())
                 def get(path, limit):
-                    request = Request(source+path,headers={'Authorization':'Bearer '+token,'Accept':'application/json'})
+                    request = Request(source+path,headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'MKM-PiFIDS/2.0'})
                     with opener.open(request,timeout=10) as response:
                         if response.status != 200 or response.headers.get_content_type() != 'application/json':
                             raise ValueError('Invalid Web response')
