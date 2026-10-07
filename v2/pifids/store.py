@@ -77,6 +77,15 @@ def effective_languages(flight, defaults):
     return flight.get('languages') or defaults
 
 
+class ClosingConnection(sqlite3.Connection):
+    """Commit/rollback and release the file handle when a transaction ends."""
+    def __exit__(self, *args):
+        try:
+            return super().__exit__(*args)
+        finally:
+            self.close()
+
+
 class DraftConflict(ValueError):
     pass
 
@@ -114,7 +123,7 @@ class Store:
                     db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?', (json.dumps(draft, ensure_ascii=False), airport))
 
     def connect(self):
-        return sqlite3.connect(self.path)
+        return sqlite3.connect(self.path, factory=ClosingConnection)
 
     def read(self, airport):
         if airport not in ('SHI', 'ROR'):

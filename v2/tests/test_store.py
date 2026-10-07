@@ -5,6 +5,26 @@ from pifids.store import Store, effective_languages, validate
 
 
 class StoreTests(unittest.TestCase):
+    def test_connection_commits_rolls_back_and_closes(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'data.sqlite')
+            db = store.connect()
+            with db:
+                db.execute('CREATE TABLE probe (value INTEGER)')
+                db.execute('INSERT INTO probe VALUES (1)')
+            with self.assertRaises(sqlite3.ProgrammingError):
+                db.execute('SELECT 1')
+            failed = store.connect()
+            with self.assertRaises(RuntimeError):
+                with failed:
+                    failed.execute('INSERT INTO probe VALUES (2)')
+                    raise RuntimeError('rollback')
+            with self.assertRaises(sqlite3.ProgrammingError):
+                failed.execute('SELECT 1')
+            with store.connect() as check:
+                self.assertEqual(check.execute('SELECT value FROM probe').fetchall(), [(1,)])
+
     def test_edit_delete_are_draft_only_and_reject_stale_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'data.sqlite'
@@ -37,6 +57,7 @@ class StoreTests(unittest.TestCase):
             with sqlite3.connect(path) as db:
                 db.execute('CREATE TABLE state (airport TEXT PRIMARY KEY,draft TEXT,published TEXT,version INTEGER)')
                 db.execute('INSERT INTO state VALUES (?,?,?,?)', ('ROR',json.dumps(flights),json.dumps(flights),7))
+            db.close()
             migrated = Store(path).read('ROR')
             self.assertEqual([{k:v for k,v in row.items() if k!='serviceDate'} for row in migrated['flights']], flights)
             self.assertEqual(Store(path).read('ROR')['flights'], migrated['flights'])
