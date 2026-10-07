@@ -1,9 +1,31 @@
 """Local bridge to the privileged Windows clock helper. UI never runs elevated."""
 import json
+import subprocess
 from pathlib import Path
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
+
+class WindowsClockStatus:
+    """Read system time service status without enabling privileged correction."""
+    can_set = False
+    def status(self):
+        script = """[Console]::OutputEncoding=[Text.UTF8Encoding]::new();
+$service=Get-Service W32Time -ErrorAction Stop;
+$parameters=Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\Parameters' -ErrorAction Stop;
+@{serviceStatus=[string]$service.Status;configuredTimeType=$parameters.Type;configuredPeer=$parameters.NtpServer;ntpServerEnabled=[bool](Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\TimeProviders\\NtpServer' -ErrorAction Stop).Enabled} | ConvertTo-Json -Compress
+"""
+        try:
+            import os
+            executable = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(executable), '-NoProfile', '-NonInteractive', '-Command', script],
+                capture_output=True, encoding='utf-8-sig', timeout=10, check=True,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            return json.loads(result.stdout)
+        except (OSError, KeyError, ValueError, subprocess.SubprocessError):
+            raise ValueError('Windows time status is unavailable') from None
+    def set_local(self, value):
+        raise ValueError('OS time correction requires authenticated clock helper configuration')
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):raise ValueError('Clock service redirects are forbidden')

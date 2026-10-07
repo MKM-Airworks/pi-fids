@@ -65,10 +65,10 @@ def handler(store, upstream=None, os_clock=None):
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
             elif url.path == '/api/clock':
-                result={**store.clock(),'osClockConfigured':os_clock is not None,'osClockAvailable':False}
+                result={**store.clock(),'osClockConfigured':os_clock is not None and getattr(os_clock,'can_set',True),'osClockAvailable':False}
                 if os_clock:
                     try:
-                        result['osClockStatus']=os_clock.status();result['osClockAvailable']=True
+                        result['osClockStatus']=os_clock.status();result['osClockAvailable']=getattr(os_clock,'can_set',True)
                     except ValueError:
                         result['osClockError']='OS clock service is unavailable'
                 self.send(200,result)
@@ -158,6 +158,11 @@ if __name__ == '__main__':
     if args.clock_service:
         from .os_clock import OsClock
         os_clock=OsClock(args.clock_service)
+    else:
+        import sys
+        if sys.platform == 'win32':
+            from .os_clock import WindowsClockStatus
+            os_clock=WindowsClockStatus()
     management = handler(store,upstream,os_clock)
     if args.auth_config:
         from .security import Security

@@ -37,3 +37,20 @@ Preview and Kiosk use separate browser profile directories.
   privileged Windows clock operation.
 
 The existing V1 code and MKM Flight Web were not changed by this deployment.
+
+## LAN time server follow-up
+
+The management PC was configured as an offline authoritative Windows Time
+server (Type=NoSync, NtpServer Enabled=1, AnnounceFlags=5). Its original Type,
+server flag, announcement flag and service start type were backed up to
+`data/w32time-before-fids.json`. The OS time value was not manually changed.
+UDP 123 is allowed for Private-profile LocalSubnet traffic by PiFIDS-LAN-NTP.
+An NTP request from the Mac received a matching server response, stratum 1,
+with a 53ms round trip. The observed difference from the Mac clock was about
+4 seconds; this validates LAN response, not absolute clock accuracy.
+
+On Windows, the manager now reads W32Time service and NTP provider status
+without administrator privileges. This read-only path cannot change the OS
+clock; manual correction still requires manager authentication and the
+privileged clock helper. Actual client OS following remains to be verified on
+a separate Windows/Pi device. Both Windows and Mac passed 40 Python tests.

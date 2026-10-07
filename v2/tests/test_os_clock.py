@@ -3,9 +3,17 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from pifids.os_clock import OsClock
+from pifids.os_clock import OsClock, WindowsClockStatus
 
 class OsClockTests(unittest.TestCase):
+    def test_windows_status_does_not_allow_clock_writes(self):
+        clock=WindowsClockStatus()
+        with patch.dict('os.environ', {'SystemRoot':'C:/Windows'}), patch('pifids.os_clock.subprocess.run') as run:
+            run.return_value.stdout='{"serviceStatus":"Running","ntpServerEnabled":true}'
+            self.assertTrue(clock.status()['ntpServerEnabled'])
+            self.assertFalse(clock.can_set)
+            with self.assertRaises(ValueError):clock.set_local('2026-10-07T12:00:00')
+            self.assertEqual(run.call_count,1)
     def test_loopback_auth_and_time_conversion_without_changing_os(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'clock.json';path.write_text(json.dumps(dict(baseUrl='http://127.0.0.1:8816',token='synthetic-clock-key-only-1234567890')))
