@@ -257,8 +257,22 @@ if(manager){
  window.addEventListener('managerlanguagechange',()=>{for(const label of document.querySelectorAll('[data-manager-label]'))label.textContent=mt(label.dataset.managerLabel);});
 }
 
-let clockState=null;
+let clockState=null,clockReceivedAt=0,clockSnapshot=null;
+function tickManagerClock(){
+ if(!manager||!clockState)return;
+ if(clockSnapshot!==clockState){clockSnapshot=clockState;clockReceivedAt=performance.now();}
+ const elapsed=performance.now()-clockReceivedAt;
+ const formatter=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'});
+ const cells=$('clockInfo').querySelectorAll('dd');
+ for(const [index,key]of [[0,'utcNow'],[1,'systemUtcNow']]){
+  if(cells[index])cells[index].textContent=formatter.format(new Date(Date.parse(clockState[key])+elapsed));
+ }
+}
 async function refreshClock(){const response=await fetch('/api/clock?airport='+encodeURIComponent($('airport').value));if(!response.ok)throw Error('Could not load clock');clockState=await response.json();const formatter=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'});$('clockInfo').replaceChildren();for(const [label,value]of [['FIDS時刻',formatter.format(new Date(clockState.utcNow))],['管理PCのOS時刻',formatter.format(new Date(clockState.systemUtcNow))],['OS時刻修正サービス',clockState.osClockAvailable?mt('利用可能'):mt('未設定または停止中')],['Windows Timeサービス',clockState.osClockStatus?.serviceStatus||mt('未確認')],['NTP時刻サーバー',clockState.osClockStatus?.ntpServerEnabled?mt('有効'):mt('未確認')]]){const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=mt(label);detail.textContent=value;$('clockInfo').append(term,detail);}
  $('clockForm').querySelector('button').disabled=!clockState.osClockAvailable;
  $('osClockHelp').textContent=clockState.osClockAvailable?mt('OS時刻を修正できます。表示端末は次回のNTP同期で追従します。'):mt('Windows管理PCで時刻サービスの初期設定が必要です。現在のプレビューではOS時刻は変更できません。');}
 if(manager){$('clockForm').onsubmit=async event=>{event.preventDefault();try{await post('/api/clock',{airport:$('airport').value,mode:'set',targetLocal:$('correctedClock').value,expectedRevision:clockState.revision});$('message').textContent=mt('管理PCのOS時刻を修正しました。');}catch(error){$('message').textContent=error.message;}};$('resetClock').onclick=()=>refreshClock().catch(error=>$('message').textContent=error.message);}
+if(manager){
+ setInterval(tickManagerClock,1000);
+ setInterval(()=>{if(!document.hidden&&!$('clockPanel').hidden)refreshClock().catch(()=>{});},15000);
+}
