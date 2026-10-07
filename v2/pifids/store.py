@@ -1,3 +1,4 @@
+from . import airport_names
 import base64
 import hashlib
 import re
@@ -95,6 +96,7 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS clock_state (id INTEGER PRIMARY KEY,offset REAL NOT NULL,revision INTEGER NOT NULL,last_sync TEXT,source TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS board_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS asset_kinds (airport TEXT NOT NULL,digest TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(airport,digest))')
@@ -130,7 +132,24 @@ class Store:
             raise ValueError('Invalid airport')
         with self.connect() as db:
             row = db.execute('SELECT draft,published,version,draft_revision FROM state WHERE airport=?', (airport,)).fetchone()
-        return {'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
+        return {'airportNames':self.airport_names(airport), 'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
+
+    def airport_names(self, airport):
+        if airport not in ('SHI','ROR'):raise ValueError('Invalid airport')
+        with self.connect() as db:return airport_names.read(db,airport)
+
+    def save_airport_name(self, data):
+        airport=data.get('airport')
+        if airport not in ('SHI','ROR'):raise ValueError('Invalid airport')
+        code=data.get('code','').strip().upper()
+        entry=airport_names.validate({code:data.get('names')})
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            current=airport_names.read(db,airport)
+            current.update(entry)
+            current=airport_names.validate(current)
+            airport_names.write(db,airport,current)
+            db.execute('UPDATE state SET version=version+1 WHERE airport=?',(airport,))
 
     def add(self, data):
         flight = validate(data)
@@ -191,7 +210,8 @@ class Store:
             timing = self.timing(db, airport, display_id)
             board = board_config.read(db,airport,display_id)
             clock=clock_sync.info(db)
-        return {'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
+            directory=airport_names.read(db,airport)
+        return {'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
                 'control':{'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
 
     def display(self, airport, display_id):

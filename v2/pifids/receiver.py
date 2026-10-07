@@ -15,7 +15,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .__main__ import handler
 from .store import Store, validate, retention
 from .security import validate_source
-from . import board_config, clock_sync
+from . import board_config, clock_sync, airport_names
 
 
 class ReceiverStore(Store):
@@ -32,6 +32,7 @@ class ReceiverStore(Store):
         for version in (state.get('version'), control.get('version')):
             if type(version) is not int or not 0 <= version <= 2147483647:
                 raise ValueError('Invalid version')
+        directory=airport_names.validate(state.get('airportNames',{}))
         clock=state.get('clock')
         if clock is not None:clock_sync.validate(clock)
         timing = retention(control)
@@ -57,6 +58,7 @@ class ReceiverStore(Store):
             if state['version'] < old or (previous and control['version'] < previous[0]):
                 raise ValueError('Older publication rejected')
             if clock is not None:clock_sync.accept(db,clock)
+            airport_names.write(db,airport,directory)
             board_config.write(db,airport,display_id,board)
             db.execute('UPDATE state SET published=?,version=? WHERE airport=?', (json.dumps(flights,ensure_ascii=False),state['version'],airport))
             db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))

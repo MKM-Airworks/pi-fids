@@ -23,7 +23,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 return
-            scoped_paths = ('/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
+            scoped_paths = ('/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
                 return self.send(403, {'error':'Airport access denied'})

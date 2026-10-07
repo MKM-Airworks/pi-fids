@@ -27,6 +27,7 @@ def handler(store, upstream=None, os_clock=None):
         def do_GET(self):
             url = urlparse(self.path)
             files = {'/static/manager.css': ('static/manager.css', 'text/css'), '/static/board-policy.js': ('static/board-policy.js', 'text/javascript'), '/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
+            files['/static/airport-names.js'] = ('static/airport-names.js', 'text/javascript')
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
             files['/static/login.css'] = ('static/login.css', 'text/css')
             files['/static/branding/airport-bg.png'] = ('static/branding/airport-bg.png', 'image/png')
@@ -100,7 +101,9 @@ def handler(store, upstream=None, os_clock=None):
                 data = json.loads(self.rfile.read(size))
                 if self.path == '/api/assets':
                     return self.send(200, {'digest': store.upload_asset(data)})
-                if self.path == '/api/flights':
+                if self.path == '/api/airport-names':
+                    store.save_airport_name(data)
+                elif self.path == '/api/flights':
                     store.add(data)
                 elif self.path in ('/api/upstream/check','/api/upstream/import'):
                     if upstream is None:
