@@ -141,6 +141,9 @@ def main():
             except Exception as error:
                 logging.warning('Sync failed; keeping disk snapshot: %s', type(error).__name__)
             time.sleep(5)
+    # Edge requests several shell/image resources concurrently at startup.
+    # Keep a larger listen backlog to avoid connection stalls on slow Windows PCs.
+    ThreadingHTTPServer.request_queue_size = 64
     server = ThreadingHTTPServer(('127.0.0.1',args.port),receiver_handler(store))
     threading.Thread(target=poll,daemon=True).start()
     print('Receiver: http://127.0.0.1:%s/display?%s' % (args.port,urlencode({'airport':args.airport,'displayId':args.display_id,'kiosk':'1'})),flush=True)
