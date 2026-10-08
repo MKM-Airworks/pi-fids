@@ -17,6 +17,8 @@ Airport flight boards and check-in/gate signage management. V2 development and s
 - 管理PCから出発・到着便一覧、ロゴ、カウンター・ゲート画像を管理
 - 登録済み表示端末の一覧・表示切替・設定変更・削除
 - 表示端末のローカル受信、保存済み画面、Edge Kiosk表示
+- 管理者・オペレーターのログインと権限管理（③以降は管理者のみ）
+- 便の更新者・変更前後とMKM Flight Web取り込みを記録する監査ログ
 - Windowsログイン後の自動起動と管理PCへの時刻同期
 - 設置空港の3レターコード・IANAタイムゾーンを指定
 

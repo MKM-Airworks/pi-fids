@@ -1,3 +1,5 @@
+import threading
+from contextlib import contextmanager
 from . import airport_names, sites
 from zoneinfo import ZoneInfo
 import base64
@@ -94,7 +96,9 @@ class Store:
     def __init__(self, path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
+        self.audit_context = threading.local()
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT,occurred_at TEXT NOT NULL,airport TEXT NOT NULL,actor TEXT NOT NULL,role TEXT NOT NULL,source TEXT NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,before_json TEXT NOT NULL,after_json TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS site_settings (airport TEXT PRIMARY KEY,timezone TEXT NOT NULL)')
             db.executemany('INSERT OR IGNORE INTO site_settings VALUES (?,?)', sites.DEFAULT_ZONES.items())
             db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
@@ -127,6 +131,28 @@ class Store:
 
     def connect(self):
         return sqlite3.connect(self.path, factory=ClosingConnection)
+
+    @contextmanager
+    def as_actor(self, identity):
+        previous=getattr(self.audit_context,'identity',None)
+        self.audit_context.identity=identity
+        try:yield
+        finally:self.audit_context.identity=previous
+
+    def audit(self, db, airport, action, target='', before=None, after=None, source=None):
+        identity=getattr(self.audit_context,'identity',None) or {'username':'system','role':'system'}
+        db.execute('INSERT INTO audit_log (occurred_at,airport,actor,role,source,action,target,before_json,after_json) VALUES (?,?,?,?,?,?,?,?,?)',
+            (datetime.now(timezone.utc).isoformat(),airport,identity['username'],identity['role'],source or 'Pi-FIDS',action,str(target),json.dumps(before,ensure_ascii=False),json.dumps(after,ensure_ascii=False)))
+
+    def record_audit(self, airport, action, target='', before=None, after=None):
+        with self.connect() as db:self.audit(db,airport,action,target,before,after)
+
+    def audit_records(self, airport, before_id=None):
+        self.timezone(airport)
+        if before_id is not None and (type(before_id) is not int or before_id<1):raise ValueError('Invalid audit cursor')
+        with self.connect() as db:
+            rows=db.execute('SELECT id,occurred_at,actor,role,source,action,target,before_json,after_json FROM audit_log WHERE airport=? AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 100',(airport,before_id,before_id)).fetchall()
+        return [dict(id=r[0],occurredAt=r[1],actor=r[2],role=r[3],source=r[4],action=r[5],target=r[6],before=json.loads(r[7]),after=json.loads(r[8])) for r in rows]
 
     def configure_site(self, airport, zone):
         sites.airport_code(airport); sites.timezone_name(zone)
@@ -184,6 +210,7 @@ class Store:
             flight['id'] = uuid.uuid4().hex
             draft.append(flight)
             db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?', (json.dumps(draft, ensure_ascii=False), flight['airport']))
+            self.audit(db,flight['airport'],'flight.create',flight['flightNumber'],None,flight)
 
     def change_flight(self, data, delete=False):
         airport = data.get('airport')
@@ -206,16 +233,21 @@ class Store:
             index = next((i for i, flight in enumerate(draft) if flight.get('id') == flight_id), None)
             if index is None:
                 raise ValueError('Flight not found for airport')
+            previous = draft[index].copy()
             if delete:
                 draft.pop(index)
             else:
                 draft[index] = {**replacement, 'id': flight_id}
             db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?', (json.dumps(draft, ensure_ascii=False), airport))
+            self.audit(db,airport,'flight.delete' if delete else 'flight.update',previous['flightNumber'],previous,None if delete else draft[index])
 
     def publish(self, airport):
         self.timezone(airport)
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            draft,published=db.execute('SELECT draft,published FROM state WHERE airport=?',(airport,)).fetchone()
             db.execute('UPDATE state SET published=draft,version=version+1 WHERE airport=?', (airport,))
+            self.audit(db,airport,'flight.publish','published flights',json.loads(published),json.loads(draft))
 
     def feed(self, airport, display_id):
         self.timezone(airport)

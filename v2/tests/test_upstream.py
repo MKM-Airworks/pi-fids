@@ -69,6 +69,20 @@ class UpstreamTests(unittest.TestCase):
         self.upstream.import_draft('SHI','2026-10-06',self.store.read('SHI')['draftRevision'],1)
         flight=next(row for row in self.store.read('SHI')['draft'] if row['flightNumber']=='BC101');self.assertEqual(flight['gate'],'2');self.assertEqual(flight['languages'],['ja','en']);self.assertEqual(flight['actualTime'],'');self.assertEqual(flight['actualDate'],'');self.assertEqual(flight['serviceDate'],'2026-10-06')
         self.assertEqual(Upstream(Store(self.path/'manager.sqlite'),self.config_path).info('SHI','2026-10-06')['lastImportDate'],'2026-10-06')
+    def test_web_audit_preserves_source_and_initiating_user(self):
+        self.stage()
+        with self.store.as_actor({'username':'test-operator','role':'operator'}):
+            self.upstream.import_draft('SHI','2026-10-05',0,1)
+        records=self.store.audit_records('SHI')
+        self.assertEqual(len(records),3)
+        self.assertTrue(all(r['source']=='MKM Flight Web' and r['actor']=='test-operator' for r in records))
+        flights=[r for r in records if r['action']=='flight.web-import']
+        self.assertEqual({r['target'] for r in flights},{'BC101','BC102'})
+        self.assertTrue(all(r['before'] is None for r in flights))
+        count=len(records)
+        with self.assertRaises(DraftConflict):self.upstream.import_draft('SHI','2026-10-05',0,1)
+        self.assertEqual(len(self.store.audit_records('SHI')),count)
+
     def test_duplicate_manual_flight_and_wrong_airport_rejected(self):
         self.stage();self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','time':'10:30'});before=self.store.read('SHI')
         with self.assertRaises(ValueError):self.upstream.import_draft('SHI','2026-10-05',before['draftRevision'],1)

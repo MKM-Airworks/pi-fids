@@ -303,5 +303,11 @@ class Upstream:
                 if len(manual)+len(imported)>100:
                     raise ValueError('Current FIDS limit: 100 flights')
                 db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?',(json.dumps(manual+imported),airport))
+                after_by_id={row['id']:row for row in imported}
+                for flight_id in sorted(set(existing)|set(after_by_id)):
+                    previous=existing.get(flight_id);replacement=after_by_id.get(flight_id)
+                    if previous != replacement:
+                        self.store.audit(db,airport,'flight.web-import',(replacement or previous)['flightNumber'],previous,replacement,source='MKM Flight Web')
+                self.store.audit(db,airport,'web.import','version '+str(web_version),None,dict(webVersion=web_version,serviceDate=service_date,flights=len(imported)),source='MKM Flight Web')
                 db.execute('INSERT INTO upstream_imports VALUES (?,?,?,?,?) ON CONFLICT(airport) DO UPDATE SET flight_ids=excluded.flight_ids,service_date=excluded.service_date,web_version=excluded.web_version,baseline=excluded.baseline',(airport,json.dumps([row['id'] for row in imported]),service_date,web_version,json.dumps(info['flights'])))
         return info

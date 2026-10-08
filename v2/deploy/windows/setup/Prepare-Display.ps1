@@ -9,7 +9,23 @@ if($airport -notmatch '^[A-Z]{3}$' -or $id -notmatch '^[A-Za-z0-9_-]{1,40}$'){th
 $name=$TerminalName;if(-not $name){$name=Read-Host 'Terminal name'}
 $choice=switch($Usage){'departure'{'1'} 'arrival'{'2'} 'signage'{'3'} default{Read-Host 'Display: 1=departures, 2=arrivals, 3=counter/gate image'}}
 if($choice -notin @('1','2','3')){throw 'Select 1, 2 or 3'}
-$registry=Invoke-RestMethod "http://127.0.0.1:8800/api/registry?airport=$airport"
+$status=Invoke-RestMethod 'http://127.0.0.1:8800/api/session'
+if(-not $status.secured){throw 'Enable management login before registering a display.'}
+if($status.setupRequired){throw 'Open management in the browser and register the initial administrator first.'}
+$loginName=Read-Host 'Administrator username'
+$securePassword=Read-Host 'Administrator password' -AsSecureString
+$pointer=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+try {
+ $loginPassword=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+ Invoke-RestMethod 'http://127.0.0.1:8800/api/login' -Method Post -ContentType 'application/json' -Body (@{username=$loginName;password=$loginPassword}|ConvertTo-Json) -SessionVariable managerSession | Out-Null
+} finally {
+ [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+ $loginPassword=$null
+ $securePassword.Dispose()
+}
+$identity=Invoke-RestMethod 'http://127.0.0.1:8800/api/session' -WebSession $managerSession
+if($identity.user.role -ne 'admin'){throw 'Administrator role is required for terminal registration.'}
+$registry=Invoke-RestMethod "http://127.0.0.1:8800/api/registry?airport=$airport" -WebSession $managerSession
 if($registry.terminals | Where-Object {$_.displayId -eq $id -or $_.name -eq $name}){throw 'Terminal ID or name already exists. Use management settings to edit it.'}
 $profile=$null
 if($choice -eq '3'){
@@ -31,9 +47,11 @@ if($LASTEXITCODE -ne 0){throw 'Could not protect connection folder'}
 $output=Join-Path $folder "$id.connection.json"
 if(Test-Path $output){throw 'Connection file already exists'}
 $body=@{airport=$airport;displayId=$id;name=$name;usage=$(if($choice -eq '3'){'signage'}else{'board'});board=@{direction=$(if($choice -eq '2'){'arrival'}else{'departure'})}}
-Invoke-RestMethod 'http://127.0.0.1:8800/api/terminals' -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Depth 5))) | Out-Null
-if($profile){Invoke-RestMethod 'http://127.0.0.1:8800/api/signage' -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes((@{airport=$airport;displayId=$id;profileName=$profile}|ConvertTo-Json))) | Out-Null}
+Invoke-RestMethod 'http://127.0.0.1:8800/api/terminals' -Method Post -WebSession $managerSession -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Depth 5))) | Out-Null
+if($profile){Invoke-RestMethod 'http://127.0.0.1:8800/api/signage' -Method Post -WebSession $managerSession -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes((@{airport=$airport;displayId=$id;profileName=$profile}|ConvertTo-Json))) | Out-Null}
 Push-Location "$Root\v2"
 try{& "$Root\runtime\python.exe" -m pifids.security terminal --config $auth --display-id $id --source $Source --output $output;if($LASTEXITCODE -ne 0){throw 'Connection issuance failed; remove incomplete registration in management.'}}finally{Pop-Location}
 Write-Host "Prepared: $name ($id)"
 Write-Host "Copy ONLY this connection file to the new display PC: $output"
+
+Invoke-RestMethod 'http://127.0.0.1:8800/api/logout' -Method Post -ContentType 'application/json' -Body '{}' -WebSession $managerSession | Out-Null

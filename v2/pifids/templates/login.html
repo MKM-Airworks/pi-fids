@@ -21,8 +21,10 @@
       <form id="loginForm" class="login-form">
         <label><span id="userLabel">Username</span><input name="username" autocomplete="username" required></label>
         <label><span id="passwordLabel">Password</span><input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
+        <label id="confirmLabel" hidden><span id="confirmText">Confirm password</span><input name="confirmation" type="password" maxlength="1024" autocomplete="new-password" disabled></label>
         <button id="submit">Sign in</button>
       </form>
+      <p id="setupHelp" hidden></p>
       <p id="message" class="operation-message" role="status"></p>
       <footer class="login-version">Pi-FIDS V2 · MKM Airworks</footer>
     </section>

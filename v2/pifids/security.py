@@ -54,8 +54,71 @@ class Security:
         self.path = Path(path)
         self.sessions = {}
         self.attempts = {}
-        self.lock = threading.Lock()
-        self.config()
+        self.lock = threading.RLock()
+        self.users_path = self.path.with_name(self.path.stem + ".users.json")
+        config = self.config()
+        if not self.users_path.exists():
+            users = {} if config['username'] == 'unused-lan-only' else {config['username']:dict(salt=config['salt'], passwordHash=config['passwordHash'],role='admin',active=True)}
+            try:
+                write_private(self.users_path, users, exclusive=True)
+            except FileExistsError:
+                pass
+
+    def users(self):
+        return json.loads(self.users_path.read_text(encoding='utf-8'))
+
+    def setup_required(self):
+        return not self.users()
+
+    @staticmethod
+    def validate_user(username, password, role):
+        if not isinstance(username,str) or not re.fullmatch(r'[A-Za-z0-9_.@-]{1,100}',username):
+            raise ValueError('Use 1–100 letters, numbers or _.@- for the username')
+        if role not in ('admin','operator'):
+            raise ValueError('Invalid role')
+        if not isinstance(password,str) or not 12 <= len(password) <= 1024:
+            raise ValueError('Password must contain 12–1024 characters')
+
+    def bootstrap(self, username, password):
+        self.validate_user(username,password,'admin')
+        with self.lock:
+            if self.users():
+                raise ValueError('Initial administrator is already registered')
+            salt=secrets.token_hex(16)
+            write_private(self.users_path,{username:dict(salt=salt,passwordHash=password_hash(password,salt),role='admin',active=True)})
+
+    def listing(self):
+        with self.lock:
+            return [dict(username=name,role=user['role'],active=user['active']) for name,user in sorted(self.users().items())]
+
+    def change_user(self, data):
+        with self.lock:
+            users=self.users(); name=data.get('username'); action=data.get('action')
+            if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_.@-]{1,100}',name):
+                raise ValueError('Invalid username')
+            before={k:v for k,v in users.get(name,{}).items() if k in ('role','active')}
+            if action=='create':
+                if name in users: raise ValueError('Username already exists')
+                self.validate_user(name,data.get('password'),data.get('role'))
+                salt=secrets.token_hex(16)
+                users[name]=dict(salt=salt,passwordHash=password_hash(data['password'],salt),role=data['role'],active=True)
+            elif action in ('update','reset','delete'):
+                if name not in users: raise ValueError('User not found')
+                if action=='delete':del users[name]
+                elif action=='reset':
+                    self.validate_user(name,data.get('password'),users[name]['role'])
+                    salt=secrets.token_hex(16);users[name].update(salt=salt,passwordHash=password_hash(data['password'],salt))
+                else:
+                    if data.get('role') not in ('admin','operator') or type(data.get('active')) is not bool:raise ValueError('Invalid user settings')
+                    users[name].update(role=data['role'],active=data['active'])
+            else:raise ValueError('Invalid user operation')
+            if not any(u['role']=='admin' and u['active'] for u in users.values()):
+                raise ValueError('Keep at least one active administrator')
+            write_private(self.users_path,users)
+            # Account changes invalidate all of that account's existing sessions.
+            self.sessions={t:v for t,v in self.sessions.items() if v['username']!=name}
+            after={k:v for k,v in users.get(name,{}).items() if k in ('role','active')}
+            return before,after
 
     def config(self):
         data = json.loads(self.path.read_text(encoding='utf-8'))
@@ -84,13 +147,14 @@ class Security:
                 return None
             attempts.append(now)
             self.attempts[peer] = attempts
-            config = self.config()
-            candidate = password_hash(password, config['salt'])
-            if not hmac.compare_digest(candidate, config['passwordHash']) or not hmac.compare_digest(username.encode(), config['username'].encode()):
+            user = self.users().get(username)
+            salt = user['salt'] if user else '00'*16
+            candidate = password_hash(password, salt)
+            if not user or not user['active'] or not hmac.compare_digest(candidate,user['passwordHash']):
                 return None
-            self.sessions = {key: value for key, value in self.sessions.items() if value > now}
+            self.sessions = {key: value for key, value in self.sessions.items() if value['expires'] > now}
             token = secrets.token_urlsafe(32)
-            self.sessions[token] = now + 8 * 3600
+            self.sessions[token] = dict(username=username,expires=now+8*3600,fingerprint=user['passwordHash'])
             self.attempts.pop(peer, None)
             return token
 
@@ -103,10 +167,17 @@ class Security:
             return ''
         return cookie['pifids_session'].value if 'pifids_session' in cookie else ''
 
-    def session(self, headers):
-        token = self.cookie_token(headers)
+    def identity(self, headers):
+        token=self.cookie_token(headers)
         with self.lock:
-            return self.sessions.get(token, 0) > time.monotonic()
+            session=self.sessions.get(token)
+            if not session or session['expires'] <= time.monotonic():return None
+            user=self.users().get(session['username'])
+            if not user or not user['active'] or not hmac.compare_digest(session['fingerprint'],user['passwordHash']):return None
+            return dict(username=session['username'],role=user['role'])
+
+    def session(self, headers):
+        return self.identity(headers) is not None
 
     def logout(self, headers):
         with self.lock:

@@ -12,7 +12,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
             if path == '/login':
                 return self.send(200, (ROOT/'templates/login.html').read_bytes(), 'text/html; charset=utf-8')
             if path == '/api/session':
-                return self.send(200, {'authenticated':security.session(self.headers), 'airport':security.config()['airport'], 'secured':True})
+                return self.send(200, {'authenticated':security.session(self.headers), 'airport':security.config()['airport'], 'secured':True,'user':security.identity(self.headers),'setupRequired':security.setup_required()})
             if path.startswith('/static/'):
                 return super().do_GET()
             if not security.session(self.headers):
@@ -23,6 +23,19 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 return
+            identity=security.identity(self.headers)
+            if path in ('/api/users','/api/audit','/api/clock') and identity['role']!='admin':
+                return self.send(403,{'error':'Administrator access required'})
+            if path=='/api/users':
+                return self.send(200,security.listing())
+            if path=='/api/audit':
+                try:
+                    query=parse_qs(urlparse(self.path).query)
+                    airport=query.get('airport',[security.config()['airport']])[0]
+                    if airport != security.config()['airport']:return self.send(403,{'error':'Airport access denied'})
+                    cursor=query.get('beforeId',[None])[0]
+                    return self.send(200,store.audit_records(airport,int(cursor) if cursor else None))
+                except ValueError as error:return self.send(400,{'error':str(error)})
             scoped_paths = ('/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
@@ -35,12 +48,17 @@ def manager_handler(store, security, upstream=None, os_clock=None):
             origin = self.headers.get('Origin')
             if origin and origin != 'http://' + self.headers.get('Host', ''):
                 return self.send(403, {'error':'Invalid origin'})
-            if self.path == '/api/login':
+            if self.path in ('/api/login','/api/setup-admin'):
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
                     if not 0 < size <= 4096:
                         raise ValueError('Invalid request size')
                     data = json.loads(self.rfile.read(size))
+                    if self.path=='/api/setup-admin':
+                        if self.client_address[0]!='127.0.0.1':return self.send(403,{'error':'Local setup only'})
+                        security.bootstrap(data.get('username'),data.get('password'))
+                        with store.as_actor({'username':data['username'],'role':'admin'}):
+                            store.record_audit(security.config()['airport'],'user.bootstrap',data['username'],None,{'role':'admin','active':True})
                     token = security.login(data.get('username'), data.get('password'), self.client_address[0])
                 except (ValueError, AttributeError):
                     return self.send(400, {'error':'Invalid login request'})
@@ -64,6 +82,10 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.end_headers()
                 self.wfile.write(b'{}')
                 return
+            identity=security.identity(self.headers)
+            operator_paths={'/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/check','/api/upstream/import','/api/signage'}
+            if identity['role']!='admin' and self.path not in operator_paths:
+                return self.send(403,{'error':'Administrator access required'})
             # Inspect airport before the existing write handler consumes the body.
             import io
             original = self.rfile
@@ -74,8 +96,14 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 body = original.read(size)
                 if json.loads(body).get('airport') != security.config()['airport']:
                     return self.send(403, {'error':'Airport access denied'})
-                self.rfile = io.BytesIO(body)
-                return super().do_POST()
+                data=json.loads(body)
+                with store.as_actor(identity):
+                    if self.path=='/api/users':
+                        before,after=security.change_user(data)
+                        store.record_audit(security.config()['airport'],'user.'+data['action'],data['username'],before,after)
+                        return self.send(200,{'ok':True})
+                    self.rfile = io.BytesIO(body)
+                    return super().do_POST()
             except (ValueError, AttributeError):
                 return self.send(400, {'error':'Invalid request'})
             finally:
