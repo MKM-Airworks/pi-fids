@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .store import Store
+from . import sites
 
 
 def password_hash(password, salt):
@@ -58,10 +59,11 @@ class Security:
 
     def config(self):
         data = json.loads(self.path.read_text(encoding='utf-8'))
-        if not isinstance(data, dict) or data.get('airport') not in ('SHI', 'ROR') or not isinstance(data.get('terminals'), dict):
+        if not isinstance(data, dict) or not isinstance(data.get('airport'),str) or not re.fullmatch('[A-Z]{3}',data['airport']) or not isinstance(data.get('terminals'), dict):
             raise ValueError('Invalid authentication configuration')
         if not isinstance(data.get('username'), str) or not 1 <= len(data['username']) <= 100:
             raise ValueError('Invalid manager username')
+        sites.timezone_name(data.get('timezone',sites.DEFAULT_ZONES.get(data['airport'],'UTC')))
         for key, length in (('salt',32), ('passwordHash',64)):
             if not isinstance(data.get(key), str) or not re.fullmatch('[a-f0-9]{'+str(length)+'}', data[key]):
                 raise ValueError('Invalid password configuration')
@@ -127,7 +129,8 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     initial = commands.add_parser('init')
     initial.add_argument('--config', required=True)
-    initial.add_argument('--airport', choices=('SHI', 'ROR'), required=True)
+    initial.add_argument('--airport', type=sites.airport_code, required=True)
+    initial.add_argument('--timezone', type=sites.timezone_name)
     initial.add_argument('--username', default='admin')
     terminal = commands.add_parser('terminal')
     terminal.add_argument('--config', required=True)
@@ -145,7 +148,7 @@ def main():
         if len(password) < 12 or len(password) > 1024 or password != getpass.getpass('Confirm password: '):
             parser.error('Passwords must match and contain 12..1024 characters')
         salt = secrets.token_hex(16)
-        write_private(args.config, {'airport':args.airport, 'username':args.username, 'salt':salt, 'passwordHash':password_hash(password,salt), 'terminals':{}}, exclusive=True)
+        write_private(args.config, {'airport':args.airport, 'timezone':args.timezone or sites.DEFAULT_ZONES.get(args.airport,'UTC'), 'username':args.username, 'salt':salt, 'passwordHash':password_hash(password,salt), 'terminals':{}}, exclusive=True)
     else:
         security = Security(args.config)
         config = security.config()
@@ -157,7 +160,7 @@ def main():
             if Path(args.output).resolve() == Path(args.config).resolve():
                 parser.error('Connection output must differ from manager configuration')
             token = secrets.token_urlsafe(32)
-            write_private(args.output, {'source':source, 'airport':config['airport'], 'displayId':args.display_id, 'token':token}, exclusive=True)
+            write_private(args.output, {'source':source, 'airport':config['airport'], 'timezone':config.get('timezone',sites.DEFAULT_ZONES.get(config['airport'],'UTC')), 'displayId':args.display_id, 'token':token}, exclusive=True)
             config['terminals'][args.display_id] = hashlib.sha256(token.encode()).hexdigest()
         write_private(args.config, config)
     print('Configuration saved. Keep credential files private.')

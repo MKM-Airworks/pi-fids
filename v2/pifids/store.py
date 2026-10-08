@@ -1,4 +1,5 @@
-from . import airport_names
+from . import airport_names, sites
+from zoneinfo import ZoneInfo
 import base64
 import hashlib
 import re
@@ -8,9 +9,8 @@ import uuid
 from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 
-def airport_today():
-    # SHI and ROR both use UTC+09:00, independent of the management PC timezone.
-    return datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+def airport_today(zone='Asia/Tokyo'):
+    return datetime.now(ZoneInfo(sites.timezone_name(zone))).date().isoformat()
 
 def retention(data):
     result = {}
@@ -27,11 +27,10 @@ from .image_metadata import dimensions
 LANGUAGES = ('ja', 'en', 'zh-Hant', 'zh-Hans', 'ko')
 
 
-def validate(data):
+def validate(data, zone='Asia/Tokyo'):
     if not isinstance(data, dict):
         raise ValueError('Invalid flight')
-    if data.get('airport') not in ('SHI', 'ROR'):
-        raise ValueError('Select SHI or ROR')
+    sites.airport_code(data.get('airport'))
     for key in ('flightNumber', 'destination', 'time'):
         if not isinstance(data.get(key), str) or not data[key].strip() or len(data[key]) > 100:
             raise ValueError('Missing or invalid ' + key)
@@ -58,7 +57,7 @@ def validate(data):
     for key in ('serviceDate', 'estimatedDate', 'actualDate'):
         value = data.get(key, '')
         if key == 'serviceDate' and not value:
-            value = airport_today()
+            value = airport_today(zone)
         if not isinstance(value, str):
             raise ValueError('Invalid ' + key)
         if value:
@@ -96,6 +95,8 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS site_settings (airport TEXT PRIMARY KEY,timezone TEXT NOT NULL)')
+            db.executemany('INSERT OR IGNORE INTO site_settings VALUES (?,?)', sites.DEFAULT_ZONES.items())
             db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS clock_state (id INTEGER PRIMARY KEY,offset REAL NOT NULL,revision INTEGER NOT NULL,last_sync TEXT,source TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS board_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
@@ -127,20 +128,39 @@ class Store:
     def connect(self):
         return sqlite3.connect(self.path, factory=ClosingConnection)
 
+    def configure_site(self, airport, zone):
+        sites.airport_code(airport); sites.timezone_name(zone)
+        with self.connect() as db:
+            old = db.execute('SELECT timezone FROM site_settings WHERE airport=?', (airport,)).fetchone()
+            if old and old[0] != zone:
+                raise ValueError('Existing airport timezone cannot be changed by installation')
+            db.execute('INSERT OR IGNORE INTO site_settings VALUES (?,?)', (airport, zone))
+            db.execute('INSERT OR IGNORE INTO state (airport,draft,published,version) VALUES (?,?,?,0)', (airport,'[]','[]'))
+
+    def timezone(self, airport):
+        sites.airport_code(airport)
+        with self.connect() as db:
+            row = db.execute('SELECT timezone FROM site_settings WHERE airport=?', (airport,)).fetchone()
+        if not row: raise ValueError('Airport is not configured on this installation')
+        return row[0]
+
+    def airports(self):
+        with self.connect() as db:
+            return [dict(airport=row[0],timezone=row[1]) for row in db.execute('SELECT airport,timezone FROM site_settings ORDER BY airport') if not getattr(self,'installed_airport',None) or row[0]==self.installed_airport]
+
     def read(self, airport):
-        if airport not in ('SHI', 'ROR'):
-            raise ValueError('Invalid airport')
+        self.timezone(airport)
         with self.connect() as db:
             row = db.execute('SELECT draft,published,version,draft_revision FROM state WHERE airport=?', (airport,)).fetchone()
-        return {'airportNames':self.airport_names(airport), 'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
+        return {'timezone':self.timezone(airport), 'airportNames':self.airport_names(airport), 'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
 
     def airport_names(self, airport):
-        if airport not in ('SHI','ROR'):raise ValueError('Invalid airport')
+        self.timezone(airport)
         with self.connect() as db:return airport_names.read(db,airport)
 
     def save_airport_name(self, data):
         airport=data.get('airport')
-        if airport not in ('SHI','ROR'):raise ValueError('Invalid airport')
+        self.timezone(airport)
         code=data.get('code','').strip().upper()
         entry=airport_names.validate({code:data.get('names')})
         with self.connect() as db:
@@ -152,7 +172,7 @@ class Store:
             db.execute('UPDATE state SET version=version+1 WHERE airport=?',(airport,))
 
     def add(self, data):
-        flight = validate(data)
+        flight = validate(data, self.timezone(data.get('airport')))
         if flight['airlineLogo']:
             self.asset(flight['airport'], flight['airlineLogo'])
         with self.connect() as db:
@@ -174,7 +194,7 @@ class Store:
             raise ValueError('Invalid flight ID')
         if type(revision) is not int or revision < 0:
             raise ValueError('Invalid draft revision')
-        replacement = None if delete else validate(data)
+        replacement = None if delete else validate(data,self.timezone(data.get('airport')))
         if replacement and replacement['airlineLogo']:
             self.asset(airport, replacement['airlineLogo'])
         with self.connect() as db:
@@ -193,14 +213,12 @@ class Store:
             db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?', (json.dumps(draft, ensure_ascii=False), airport))
 
     def publish(self, airport):
-        if airport not in ('SHI', 'ROR'):
-            raise ValueError('Invalid airport')
+        self.timezone(airport)
         with self.connect() as db:
             db.execute('UPDATE state SET published=draft,version=version+1 WHERE airport=?', (airport,))
 
     def feed(self, airport, display_id):
-        if airport not in ('SHI', 'ROR'):
-            raise ValueError('Invalid airport')
+        self.timezone(airport)
         self.validate_display_id(display_id)
         with self.connect() as db:
             db.execute('BEGIN')
@@ -212,7 +230,7 @@ class Store:
             board = board_config.read(db,airport,display_id)
             clock=clock_sync.info(db)
             directory=airport_names.read(db,airport)
-        return {'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
+        return {'timezone':self.timezone(airport), 'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
                 'control':{'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
 
     def display(self, airport, display_id):
@@ -224,7 +242,7 @@ class Store:
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)
             board = board_config.read(db,airport,display_id)
-        return {'board':board, **timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
+        return {'timezone':self.timezone(airport), 'board':board, **timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
 
     @staticmethod
     def timing(db, airport, display_id):

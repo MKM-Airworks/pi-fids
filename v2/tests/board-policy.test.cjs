@@ -47,3 +47,14 @@ test('synchronized clock advances on monotonic time despite host clock differenc
  assert.equal(clock.now(1500),Date.parse('2026-10-05T03:00:01Z'));
  assert.equal(p.visible([flight()],'departure',{},clock.now(500)).length,0);
 });
+test('installation timezone handles overseas dates and seasonal offsets',()=>{
+ try{
+  p.configureTimezone('America/New_York');
+  assert.equal(p.timestamp('2026-07-01','10:00'),Date.parse('2026-07-01T14:00:00Z'));
+  assert.equal(p.timestamp('2026-01-01','10:00'),Date.parse('2026-01-01T15:00:00Z'));
+  assert.equal(p.today(Date.parse('2026-07-01T02:00:00Z')),'2026-06-30');
+  assert.ok(Number.isNaN(p.timestamp('2026-03-08','02:30')));
+  p.configureTimezone('Asia/Bangkok');
+  assert.equal(p.timestamp('2026-10-08','10:00'),Date.parse('2026-10-08T03:00:00Z'));
+ }finally{p.configureTimezone('Asia/Tokyo');}
+});

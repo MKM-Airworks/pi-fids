@@ -1,10 +1,13 @@
-param([string]$Root=(Join-Path $env:LOCALAPPDATA 'MKM\PiFidsV2-Test'),[string]$Source='http://192.168.11.20:8805')
+param([string]$Root,[string]$Source,[string]$Airport,[string]$DisplayId,[string]$TerminalName,[ValidateSet('departure','arrival','signage')][string]$Usage,[string]$ProfileName)
+if(-not $Root){$Root=Join-Path $env:LOCALAPPDATA 'MKM\PiFidsManager';if(-not(Test-Path "$Root\data\site.json")){$Root=Join-Path $env:LOCALAPPDATA 'MKM\PiFidsV2-Test'}}
+if(-not $Source){if(Test-Path "$Root\data\site.json"){$site=Get-Content "$Root\data\site.json" -Raw | ConvertFrom-Json;$Source='http://'+$site.lanAddress+':8805'}else{$Source='http://192.168.11.20:8805'}}
 $ErrorActionPreference='Stop'
-$airport=Read-Host 'Airport (SHI / ROR)'
-$id=Read-Host 'Terminal ID (example: counter-02)'
-if($airport -notin @('SHI','ROR') -or $id -notmatch '^[A-Za-z0-9_-]{1,40}$'){throw 'Invalid airport or terminal ID'}
-$name=Read-Host 'Terminal name'
-$choice=Read-Host 'Display: 1=departures, 2=arrivals, 3=counter/gate image'
+if(-not $Airport){$Airport=Read-Host 'Airport (3-letter code)'}
+$airport=$Airport
+$id=$DisplayId;if(-not $id){$id=Read-Host 'Terminal ID (example: counter-02)'}
+if($airport -notmatch '^[A-Z]{3}$' -or $id -notmatch '^[A-Za-z0-9_-]{1,40}$'){throw 'Invalid airport or terminal ID'}
+$name=$TerminalName;if(-not $name){$name=Read-Host 'Terminal name'}
+$choice=switch($Usage){'departure'{'1'} 'arrival'{'2'} 'signage'{'3'} default{Read-Host 'Display: 1=departures, 2=arrivals, 3=counter/gate image'}}
 if($choice -notin @('1','2','3')){throw 'Select 1, 2 or 3'}
 $registry=Invoke-RestMethod "http://127.0.0.1:8800/api/registry?airport=$airport"
 if($registry.terminals | Where-Object {$_.displayId -eq $id -or $_.name -eq $name}){throw 'Terminal ID or name already exists. Use management settings to edit it.'}
@@ -13,7 +16,7 @@ if($choice -eq '3'){
  $profiles=@($registry.profiles)
  if(-not $profiles.Count){throw 'Register an image layout in management first'}
  for($i=0;$i -lt $profiles.Count;$i++){Write-Host ($i.ToString()+': '+$profiles[$i].name)}
- $selected=Read-Host 'Select layout number'
+ if($ProfileName){$selected=[Array]::IndexOf(@($profiles | ForEach-Object {$_.name}),$ProfileName).ToString()}else{$selected=Read-Host 'Select layout number'}
  if($selected -notmatch '^\d+$' -or [int]$selected -ge $profiles.Count){throw 'Invalid layout number'}
  $profile=$profiles[[int]$selected].name
 }

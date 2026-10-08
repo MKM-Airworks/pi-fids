@@ -1,3 +1,5 @@
+通常は共通インストーラーを使います。手順は INSTALLER-ja.md を参照してください。以下は従来のコマンド方式です。
+
 # 表示端末セットアップ（Windows 64bit）
 
 管理PCで登録・接続ファイルを発行し、表示PCで初期設定します。Windows 10/11の64bitとMicrosoft Edge用です。Raspberry Pi用ではありません。

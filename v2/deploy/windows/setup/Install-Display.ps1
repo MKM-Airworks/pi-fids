@@ -5,7 +5,7 @@ if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrat
 if(-not $ConnectionFile){$ConnectionFile=Read-Host 'Path to terminal connection JSON'}
 $ConnectionFile=$ConnectionFile.Trim('"')
 $config=Get-Content -LiteralPath $ConnectionFile -Raw | ConvertFrom-Json
-if($config.airport -notin @('SHI','ROR') -or $config.displayId -notmatch '^[A-Za-z0-9_-]{1,40}$' -or $config.token -notmatch '^[A-Za-z0-9_-]{32,128}$'){throw 'Invalid connection file'}
+if($config.airport -notmatch '^[A-Z]{3}$' -or $config.displayId -notmatch '^[A-Za-z0-9_-]{1,40}$' -or $config.token -notmatch '^[A-Za-z0-9_-]{32,128}$'){throw 'Invalid connection file'}
 $source=[Uri]$config.source
 if($source.Scheme -notin @('http','https') -or $source.UserInfo -or $source.Query -or $source.Fragment -or $source.AbsolutePath -ne '/'){throw 'Invalid feed address'}
 if(-not [Environment]::Is64BitOperatingSystem){throw 'This package requires 64-bit Windows'}

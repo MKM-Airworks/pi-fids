@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from .receiver import NoRedirect
 from .security import validate_source
 from .store import DraftConflict, validate
+from . import sites
+from zoneinfo import ZoneInfo
 
 SCOPE = ('organizationId', 'airportId', 'product', 'stationAirport', 'timezone')
 IDENTITY = ('schemaVersion', *SCOPE, 'releaseId', 'dataVersion', 'publishedAt', 'preview', 'coverage')
@@ -75,9 +77,8 @@ def parse_json(raw):
     return json.loads(raw.decode('utf-8'), object_pairs_hook=object_pairs, parse_constant=invalid_constant)
 
 
-def local_date():
-    # SHI and ROR both use UTC+09:00, without seasonal clock changes.
-    return datetime.now(timezone(timedelta(hours=9))).date()
+def local_date(zone='Asia/Tokyo'):
+    return datetime.now(ZoneInfo(sites.timezone_name(zone))).date()
 
 
 def verify(manifest, raw, expected, previous=None):
@@ -181,7 +182,7 @@ class Upstream:
         if parsed.scheme != 'https' and not (config.get('allowLoopback') is True and parsed.hostname == '127.0.0.1' and parsed.scheme == 'http'):
             raise ValueError('Web source requires HTTPS; only explicit localhost tests allow HTTP')
         expected = config['expected']
-        if expected.get('stationAirport') not in ZONES or expected.get('timezone') != ZONES[expected['stationAirport']] or expected.get('product') not in PROFILES:
+        if expected.get('timezone') != self.store.timezone(expected.get('stationAirport')) or expected.get('product') not in PROFILES:
             raise ValueError('Unsupported Web scope or airport timezone')
         for key in ('organizationId','airportId'):
             if str(uuid.UUID(expected[key])) != expected[key]:
@@ -245,7 +246,7 @@ class Upstream:
 
     def info(self, airport, service_date=None):
         expected = self.require_airport(airport)
-        service_date = service_date or local_date().isoformat()
+        service_date = service_date or local_date(expected['timezone']).isoformat()
         if date.fromisoformat(service_date).isoformat() != service_date:
             raise ValueError('Invalid service date')
         cache = self.cached(airport)

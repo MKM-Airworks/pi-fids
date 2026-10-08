@@ -15,18 +15,21 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .__main__ import handler
 from .store import Store, validate, retention
 from .security import validate_source
-from . import board_config, clock_sync, airport_names
+from . import board_config, clock_sync, airport_names, sites
 
 
 class ReceiverStore(Store):
     def accept(self, airport, display_id, state, control, images):
         if state.get('airport') != airport or control.get('displayId') != display_id:
             raise ValueError('Receiver identity mismatch')
+        zone=state.get('timezone',sites.DEFAULT_ZONES.get(airport))
+        sites.timezone_name(zone)
+        self.configure_site(airport,zone)
         self.validate_display_id(display_id)
         flights = state.get('flights')
         if not isinstance(flights, list) or len(flights) > 100:
             raise ValueError('Invalid flights')
-        flights = [validate(flight) for flight in flights]
+        flights = [validate(flight,zone) for flight in flights]
         if any(flight['airport'] != airport for flight in flights):
             raise ValueError('Flight airport mismatch')
         for version in (state.get('version'), control.get('version')):
@@ -111,7 +114,8 @@ def receiver_handler(store):
 def main():
     parser = argparse.ArgumentParser(description='Pi-FIDS localhost display receiver prototype')
     parser.add_argument('--source')
-    parser.add_argument('--airport', choices=('SHI','ROR'))
+    parser.add_argument('--airport', type=sites.airport_code)
+    parser.add_argument('--timezone', type=sites.timezone_name)
     parser.add_argument('--display-id')
     parser.add_argument('--connection', help='Terminal-specific connection JSON; token never appears in browser URL')
     parser.add_argument('--port', type=int, default=8801)
@@ -124,16 +128,19 @@ def main():
         connection = json.loads(Path(args.connection).read_text(encoding='utf-8'))
         args.source, args.airport, args.display_id = connection['source'], connection['airport'], connection['displayId']
         token = connection['token']
+        args.timezone=connection.get('timezone',sites.DEFAULT_ZONES.get(args.airport,'UTC'))
         if not isinstance(token, str) or not 32 <= len(token) <= 128 or not token.isascii() or any(c.isspace() for c in token):
             parser.error('Invalid terminal credential')
-    if not args.source or args.airport not in ('SHI','ROR') or not args.display_id:
+    if not args.source or not args.airport or not args.display_id:
         parser.error('Provide --connection or --source, --airport and --display-id')
     try:
         args.source = validate_source(args.source)
     except ValueError as error:
         parser.error(str(error))
+    sites.airport_code(args.airport)
     Store.validate_display_id(args.display_id)
     store = ReceiverStore(args.database)
+    store.configure_site(args.airport,args.timezone or sites.DEFAULT_ZONES.get(args.airport,'UTC'))
     def poll():
         while True:
             try:
