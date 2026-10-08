@@ -120,6 +120,8 @@ def handler(store, upstream=None, os_clock=None):
                     store.publish(data.get('airport'))
                 elif self.path == '/api/clock':
                     clock_sync.correct_os(store,data,os_clock)
+                elif self.path == '/api/terminals/delete':
+                    registry.delete_terminal(store,data)
                 elif self.path == '/api/terminals':
                     registry.save_terminal(store,data)
                 elif self.path == '/api/profiles':

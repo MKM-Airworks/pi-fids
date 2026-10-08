@@ -51,7 +51,7 @@ class RegistryTests(unittest.TestCase):
     def test_legacy_terminals_migrate_without_changing_display(self):
         self.store.set_display(dict(airport='ROR',displayId='gate-02',mode='gate',airline='Sample'))
         before=self.store.display('ROR','gate-02')
-        self.assertEqual(registry.listing(self.store,'ROR')['terminals'],[dict(displayId='gate-02',name='gate-02',profileName=None,usage='signage')])
+        self.assertEqual(registry.listing(self.store,'ROR')['terminals'],[dict(displayId='gate-02',name='gate-02',profileName=None,usage='signage',direction='departure',currentDisplay='Sample')])
         self.assertEqual(self.store.display('ROR','gate-02'),before)
 
     def test_same_image_choices_keep_the_selected_name(self):
@@ -62,3 +62,19 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(registry.listing(self.store,'ROR')['terminals'][0]['profileName'],'JX Economy Class')
         self.store.set_display(dict(airport='ROR',displayId='counter-01',mode='gate',airline='Other airline'))
         self.assertIsNone(registry.listing(self.store,'ROR')['terminals'][0]['profileName'])
+
+class TerminalDeletionTests(unittest.TestCase):
+    def test_delete_preserves_profiles_and_blocks_feed_until_reregistered(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            store=Store(Path(directory)/'test.sqlite')
+            registry.save_terminal(store,dict(airport='SHI',displayId='test-01',name='Test',usage='signage'))
+            registry.save_profile(store,dict(airport='SHI',name='ANA Business',mode='counter',airline='ANA',logo='',image=''))
+            registry.apply(store,dict(airport='SHI',displayId='test-01',profileName='ANA Business'))
+            registry.delete_terminal(store,dict(airport='SHI',displayId='test-01'))
+            self.assertEqual(registry.listing(store,'SHI')['terminals'],[])
+            self.assertEqual(len(registry.listing(store,'SHI')['profiles']),1)
+            with self.assertRaises(ValueError):store.feed('SHI','test-01')
+            registry.save_terminal(store,dict(airport='SHI',displayId='test-01',name='Test',usage='board'))
+            self.assertEqual(store.feed('SHI','test-01')['control']['mode'],'board')

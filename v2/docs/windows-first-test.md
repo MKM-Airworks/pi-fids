@@ -54,3 +54,23 @@ without administrator privileges. This read-only path cannot change the OS
 clock; manual correction still requires manager authentication and the
 privileged clock helper. Actual client OS following remains to be verified on
 a separate Windows/Pi device. Both Windows and Mac passed 40 Python tests.
+
+## 2026-10-08 separate display test
+
+Win10 Home x64 HP msuzuki-hp (192.168.11.23) received SHI flights and
+verified logo/image bytes from Win11 manager 192.168.11.20. A separate
+read-only feed listens on Private LAN port 8805 using terminal-scoped keys;
+management remains loopback only. Receiver uses pythonw with file logging;
+Edge kiosk uses its own profile. OS clock follows management NTP with a
+64-second poll interval. Startup tasks remain manual, without logon triggers.
+
+Static signage previously rebuilt object URLs at every five-second fetch and
+rebuilt the image at language interval boundaries. Unchanged content now
+retains its URLs and image DOM; signage rendering ignores language rotation.
+Terminal lists show current layouts, per-row signage switching and settings
+editing/deletion. Deletion removes local registration/control and denies new
+feed requests until the same ID is registered again. Offline receiver content
+is retained; deletion does not remotely wipe the display. Profiles and flight
+data are preserved. 43 Python tests passed; live Windows receiver image retrieval
+and management list UI verified. Actual disappearance of visible flicker needs
+user observation on the physical display.

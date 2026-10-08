@@ -55,7 +55,7 @@ function render(){
  const visibleFlights=mode==='board'?BoardPolicy.visible(state.flights,arrival?'arrival':'departure',displayConfig,fidsNow()):[];
  const pages=Math.max(1,Math.ceil(visibleFlights.length/pageSize));
  const page=Math.floor(fidsNow()/1000/15)%pages;
- const renderKey=JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
+ const renderKey=mode!=='board'?JSON.stringify([mode,displayConfig,settings.logo]):JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
  $('status').textContent=(offline?'通信停止・保存済み表示 · ':'')+'画面 '+displayId+' · 表示指示 '+displayConfig.version+' · 版 '+state.version+' · 最終取得 '+lastSuccess.toLocaleTimeString();
  if(lastDisplayRenderKey===renderKey)return;lastDisplayRenderKey=renderKey;
  if(mode==='board'){
@@ -93,12 +93,12 @@ function editFlight(flight){
  selected=[...(flight.languages||[])];for(const [index,box]of [...$('languages').querySelectorAll('input')].entries())box.checked=selected.includes(Object.keys(names)[index]);
  $('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');render();$('flightForm').scrollIntoView({behavior:'smooth',block:'start'});
 }
-async function refresh(){try{const a=manager?$('airport').value:airport;const response=await fetch('/api/state?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('取得失敗'));const next=await response.json();if(!manager){const control=await fetch('/api/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(displayId));if(!control.ok)throw Error('表示指示の取得失敗');const nextControl=await control.json();const nextUrls=await prepareAssets(nextControl,false,next.flights);for(const url of Object.values(assetUrls))URL.revokeObjectURL(url);assetUrls=nextUrls;displayConfig=nextControl;lastDisplayRenderKey=null;}state=next;setClock(next.clock);lastSuccess=new Date();offline=false;if(!manager){try{localStorage.setItem(settingsKey+':snapshot',JSON.stringify({state,displayConfig,lastSuccess:lastSuccess.toISOString()}));}catch{}}render();if(manager){$('displayLink').href='/display?airport='+a;refreshAirportCodes();await refreshAssets(a);await refreshRegistry(a);await refreshUpstream(a);await refreshClock();}}catch(error){offline=true;$(manager?'message':'status').textContent=(manager?'Update stopped: '+error.message:'更新停止：'+error.message+'（最後の表示を保持）');}}
+async function refresh(){try{const a=manager?$('airport').value:airport;const response=await fetch('/api/state?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('取得失敗'));const next=await response.json();if(!manager){const control=await fetch('/api/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(displayId));if(!control.ok)throw Error('表示指示の取得失敗');const nextControl=await control.json();const contentChanged=JSON.stringify([nextControl,next.flights,next.airportNames])!==JSON.stringify([displayConfig,state?.flights,state?.airportNames]);if(contentChanged){const nextUrls=await prepareAssets(nextControl,false,next.flights);const previousUrls=assetUrls;assetUrls=nextUrls;displayConfig=nextControl;lastDisplayRenderKey=null;setTimeout(()=>{for(const url of Object.values(previousUrls))URL.revokeObjectURL(url);},1000);}displayConfig=nextControl;}state=next;setClock(next.clock);lastSuccess=new Date();offline=false;if(!manager){try{localStorage.setItem(settingsKey+':snapshot',JSON.stringify({state,displayConfig,lastSuccess:lastSuccess.toISOString()}));}catch{}}render();if(manager){$('displayLink').href='/display?airport='+a;refreshAirportCodes();await refreshAssets(a);await refreshRegistry(a);await refreshUpstream(a);await refreshClock();}}catch(error){offline=true;$(manager?'message':'status').textContent=(manager?'Update stopped: '+error.message:'更新停止：'+error.message+'（最後の表示を保持）');}}
 async function post(path,data){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw Error(result.error);await refresh();return result;}
 if(manager){$('openFlightEditor').onclick=()=>{resetEditor();$('flightEditor').open=true;$('flightEditor').scrollIntoView({behavior:'smooth',block:'start'});};for(const [code,name]of Object.entries(names)){const label=document.createElement('label');const box=document.createElement('input');box.type='checkbox';box.onchange=()=>{selected=selected.filter(x=>x!==code);if(box.checked)selected.push(code);$('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');};label.append(box,document.createTextNode(name));$('languages').append(label);}$('airport').onchange=()=>{resetEditor();pendingDelete=null;refresh();};$('cancelEdit').onclick=resetEditor;$('flightForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));await post(editing?'/api/flights/update':'/api/flights',{...data,airport:$('airport').value,languages:selected,...(editing||{})});resetEditor();$('message').textContent=mt('下書きを保存しました。公開すると表示に反映されます。');}catch(error){$('message').textContent=error.message;}};$('publish').onclick=async()=>{try{await post('/api/publish',{airport:$('airport').value});$('message').textContent=mt('公開しました。');}catch(error){$('message').textContent=error.message;}};}else{for(const [code,name]of Object.entries(names)){const option=document.createElement('option');option.value=code;option.textContent=name;$('defaultLanguage').append(option);}$('defaultLanguage').value=settings.language;$('interval').value=settings.interval;$('logoUrl').value=settings.logo;$('rowsPerPage').value=settings.rows;$('boardDirection').value=settings.direction;function logo(){const image=$('airportLogo');image.hidden=!settings.logo;image.src=settings.logo;image.onerror=()=>image.hidden=true;}logo();$('saveSettings').onclick=()=>{const interval=Number($('interval').value);if(!Number.isFinite(interval)||interval<3||interval>60)return;const raw=$('logoUrl').value.trim();if(raw){try{const url=new URL(raw);if(!['http:','https:'].includes(url.protocol))return;}catch{return;}}const rows=Number($('rowsPerPage').value);if(!Number.isInteger(rows)||rows<4||rows>16)return;settings={language:$('defaultLanguage').value,interval,logo:raw,rows,direction:$('boardDirection').value};localStorage.setItem(settingsKey,JSON.stringify(settings));logo();render();};setInterval(()=>{$('clock').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:airport==='ROR'?'Pacific/Palau':'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(fidsNow()));if(state)render();},1000);}
 
 
-if(manager){function targetLink(){$('targetDisplay').href='/display?airport='+encodeURIComponent($('airport').value)+'&displayId='+encodeURIComponent($('displayId').value)+'&preview=screens';} $('displayId').oninput=targetLink;$('loadDisplaySettings').onclick=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('displayId').onchange=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('airport').addEventListener('change',()=>{targetLink();loadDisplayControl().catch(error=>$('message').textContent=error.message);});$('displayForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));if(data.usage==='board')data.board=readBoardForm();for(const key of ['departureHideMinutes','arrivalHideMinutes'])data[key]=Number(data[key]);await post('/api/terminals',{...data,airport:$('airport').value});targetLink();$('message').textContent=mt('端末設定を保存しました。');}catch(error){$('message').textContent=error.message;}};}
+if(manager){function targetLink(){$('targetDisplay').href='/display?airport='+encodeURIComponent($('airport').value)+'&displayId='+encodeURIComponent($('displayId').value)+'&preview=screens';} $('displayId').oninput=targetLink;$('loadDisplaySettings').onclick=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('displayId').onchange=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('airport').addEventListener('change',()=>{targetLink();loadDisplayControl().catch(error=>$('message').textContent=error.message);});$('displayForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));if(data.usage==='board')data.board=readBoardForm();for(const key of ['departureHideMinutes','arrivalHideMinutes'])data[key]=Number(data[key]);const profile=$('terminalProfile').value;await post('/api/terminals',{...data,airport:$('airport').value});if(data.usage==='signage'&&profile)await post('/api/signage',{airport:$('airport').value,displayId:data.displayId,profileName:profile});targetLink();$('message').textContent=mt('端末設定を保存しました。');}catch(error){$('message').textContent=error.message;}};}
 
 const imageCacheName='pifids-images-v1';
 function imagePath(digest){return '/asset?airport='+encodeURIComponent(airport)+'&id='+digest;}
@@ -176,7 +176,7 @@ async function loadDisplayControl(){
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
  $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';
  for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
- boardFormVisibility();
+ $('terminalProfile').replaceChildren();for(const profile of [{name:mt('なし'),value:''},...registryState.profiles.map(p=>({name:p.name,value:p.name}))]){const option=document.createElement('option');option.value=profile.value;option.textContent=profile.name;$('terminalProfile').append(option);}$('terminalProfile').value=terminal?.profileName||'';boardFormVisibility();
 }
 
 function emptyManager(text){const box=document.createElement('p');box.className='manager-empty';box.textContent=mt(text);return box;}
@@ -199,7 +199,7 @@ async function refreshRegistry(a){
  $('signageForm').querySelector('button').disabled=!signageTerminals.length;
  $('signageTerminal').disabled=!signageTerminals.length;
  $('signageEmpty').hidden=!!signageTerminals.length;
- await signageStatus();
+ await signageStatus();renderTerminalLists();
 }
 async function signageStatus(){
  const id=$('signageTerminal').value,a=$('airport').value;
@@ -242,7 +242,7 @@ if(manager){
 function boardDirection(){return displayConfig.board?.direction||settings.direction;}
 function boardColumns(){return BoardPolicy.selectedColumns(displayConfig.board,boardDirection());}
 function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
-function boardFormVisibility(){
+function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalUsage').value!=='signage';
  const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;
  for(const input of $('boardTerminalSettings').querySelectorAll('input,select'))input.disabled=!board;
  $('departureColumnSettings').hidden=$('terminalDirection').value!=='departure';$('arrivalColumnSettings').hidden=$('terminalDirection').value!=='arrival';
@@ -295,4 +295,30 @@ if(manager){
  $('airportCodeForm').onsubmit=async event=>{event.preventDefault();const form=event.target;try{const data=Object.fromEntries(new FormData(form));const code=data.code.toUpperCase();delete data.code;await post('/api/airport-names',{airport:$('airport').value,code,names:data});$('registeredAirportCode').value=code;form.elements.code.value=code;$('message').textContent=mt('空港名を保存しました。表示端末にも反映します。');}catch(error){$('message').textContent=error.message;}};
  $('airport').addEventListener('change',()=>{$('airportCodeForm').reset();});
  window.addEventListener('managerlanguagechange',refreshAirportCodes);
+}
+
+function renderTerminalLists(){
+ const language=$('managerLanguage').value;
+ const key=JSON.stringify([registryState,language]);
+ if(renderTerminalLists.key===key)return;renderTerminalLists.key=key;
+ const current=t=>t.currentDisplay||t.profileName|| (t.usage==='board'?mt(t.direction==='arrival'?'到着':'出発')+' · '+mt('便一覧'):mt('未設定'));
+ function make(target,items,signage){
+  const container=$(target);container.replaceChildren();
+  if(!items.length){container.append(emptyManager('登録済みの端末はありません'));return;}
+  const table=document.createElement('table');table.className='terminal-list';
+  const head=table.createTHead().insertRow();
+  for(const label of ['端末名','端末ID','現在の表示','操作']){const th=document.createElement('th');th.textContent=mt(label);head.append(th);}
+  for(const t of items){const row=table.insertRow();for(const value of [t.name,t.displayId,current(t)])row.insertCell().textContent=value;
+   const cell=row.insertCell();
+   function button(label,action){const b=document.createElement('button');b.type='button';b.textContent=mt(label);b.onclick=action;cell.append(b);}
+   if(signage){const select=document.createElement('select');for(const profile of registryState.profiles){const option=document.createElement('option');option.value=profile.name;option.textContent=profile.name;select.append(option);}select.value=t.profileName||'';cell.append(select);
+    button('表示を切り替える',async()=>{try{if(!select.value)return;await post('/api/signage',{airport:$('airport').value,displayId:t.displayId,profileName:select.value});$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(e){$('message').textContent=e.message;}});
+   }else{
+    button('設定を変更',()=>{$('registeredTerminal').value=t.displayId;$('displayId').value=t.displayId;loadDisplayControl().then(()=>$('displayForm').scrollIntoView({behavior:'smooth'}));});
+    button('削除',async()=>{if(!confirm(mt('この端末の登録を削除しますか？')+' '+t.name))return;try{await post('/api/terminals/delete',{airport:$('airport').value,displayId:t.displayId});$('registeredTerminal').value='';$('displayId').value='';$('displayForm').elements.name.value='';$('message').textContent=mt('端末の登録を削除しました。');}catch(e){$('message').textContent=e.message;}});
+   }
+  }container.append(table);
+ }
+ make('signageTerminalList',registryState.terminals.filter(t=>t.usage==='signage'),true);
+ make('settingsTerminalList',registryState.terminals,false);
 }

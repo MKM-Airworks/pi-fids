@@ -205,6 +205,7 @@ class Store:
         with self.connect() as db:
             db.execute('BEGIN')
             published, version = db.execute('SELECT published,version FROM state WHERE airport=?', (airport,)).fetchone()
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='deleted_terminals'").fetchone() and db.execute('SELECT 1 FROM deleted_terminals WHERE airport=? AND display_id=?',(airport,display_id)).fetchone():raise ValueError('Terminal registration deleted')
             display = db.execute('SELECT mode,airline,version FROM displays WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)

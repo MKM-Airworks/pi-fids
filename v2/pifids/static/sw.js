@@ -1,4 +1,4 @@
-const shellCache='pifids-shell-v4';
+const shellCache='pifids-shell-v5';
 self.addEventListener('install',event=>event.waitUntil(caches.open(shellCache).then(cache=>cache.addAll(['/display','/static/app.js','/static/airport-names.js','/static/board-policy.js','/static/style.css','/static/display.css'])).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',event=>{

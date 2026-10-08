@@ -6,6 +6,7 @@ from . import board_config
 
 def init(store):
     with store.connect() as db:
+        db.execute('CREATE TABLE IF NOT EXISTS deleted_terminals (airport TEXT NOT NULL,display_id TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
         db.execute('CREATE TABLE IF NOT EXISTS terminal_purpose (airport TEXT NOT NULL,display_id TEXT NOT NULL,usage TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
         db.execute('CREATE TABLE IF NOT EXISTS terminals (airport TEXT NOT NULL,display_id TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(airport,display_id),UNIQUE(airport,name))')
         db.execute('CREATE TABLE IF NOT EXISTS terminal_layouts (airport TEXT NOT NULL,display_id TEXT NOT NULL,name TEXT NOT NULL,version INTEGER NOT NULL,PRIMARY KEY(airport,display_id))')
@@ -24,6 +25,10 @@ def listing(store,airport):
     with store.connect() as db:
         terminals=[dict(displayId=row[0],name=row[1],profileName=row[2],usage=row[3]) for row in db.execute("SELECT t.display_id,t.name,l.name,COALESCE(p.usage,CASE WHEN d.mode='board' THEN 'board' ELSE 'signage' END) FROM terminals t LEFT JOIN terminal_layouts l ON l.airport=t.airport AND l.display_id=t.display_id LEFT JOIN terminal_purpose p ON p.airport=t.airport AND p.display_id=t.display_id LEFT JOIN displays d ON d.airport=t.airport AND d.display_id=t.display_id WHERE t.airport=? ORDER BY t.name",(airport,))]
         profiles=[dict(zip(('name','mode','airline','logo','image'),row)) for row in db.execute('SELECT name,mode,airline,logo,image FROM signage_profiles WHERE airport=? ORDER BY name',(airport,))]
+    for terminal in terminals:
+        control=store.display(airport,terminal['displayId'])
+        terminal['direction']=(control.get('board') or {}).get('direction','departure')
+        terminal['currentDisplay']=terminal['profileName'] or (control['airline'] if control['mode']!='board' else '')
     return dict(terminals=terminals,profiles=profiles)
 
 
@@ -40,6 +45,7 @@ def save_terminal(store,data):
     try:
         with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            db.execute('DELETE FROM deleted_terminals WHERE airport=? AND display_id=?',(airport,display_id))
             db.execute('INSERT INTO terminals VALUES (?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET name=excluded.name',(airport,display_id,name))
             db.execute('INSERT INTO displays VALUES (?,?,\'board\',\'\',1) ON CONFLICT(airport,display_id) DO UPDATE SET version=displays.version+1',(airport,display_id))
             if usage is not None:
@@ -92,3 +98,13 @@ def apply(store,data):
         db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image',(airport,display_id,logo,image))
         version=db.execute('SELECT version FROM displays WHERE airport=? AND display_id=?',(airport,display_id)).fetchone()[0]
         db.execute('INSERT INTO terminal_layouts VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET name=excluded.name,version=excluded.version',(airport,display_id,profile_name,version))
+
+def delete_terminal(store,data):
+    airport,display_id=data.get('airport'),data.get('displayId')
+    store.read(airport);store.validate_display_id(display_id);init(store)
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        if not db.execute('SELECT 1 FROM terminals WHERE airport=? AND display_id=?',(airport,display_id)).fetchone():raise ValueError('Terminal not found')
+        db.execute('INSERT OR IGNORE INTO deleted_terminals VALUES (?,?)',(airport,display_id))
+        for table in ('terminals','terminal_purpose','terminal_layouts','displays','display_assets','display_timing','board_settings'):
+            db.execute('DELETE FROM '+table+' WHERE airport=? AND display_id=?',(airport,display_id))
