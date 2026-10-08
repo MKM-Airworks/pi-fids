@@ -1,5 +1,5 @@
 """Build a credential-free Windows setup payload from a verified runtime ZIP.
-Run with a Python environment containing tzdata; compile with Build-Installer.ps1.
+Run with a Python environment containing tzdata. Output is a semi-installer ZIP.
 """
 import argparse
 import importlib.metadata
@@ -17,7 +17,7 @@ source=setup.parents[2]/'pifids'
 with tempfile.TemporaryDirectory() as temporary:
     root=Path(temporary)
     for path in setup.iterdir():
-        if path.is_file() and path.suffix in ('.ps1','.py','.pyw','.cmd','.md'):
+        if path.name != 'Build-Payload.py' and path.is_file() and path.suffix in ('.ps1','.py','.pyw','.cmd','.md','.html','.txt'):
             shutil.copy2(path,root/path.name)
     with zipfile.ZipFile(args.runtime) as archive:
         for item in archive.infolist():
