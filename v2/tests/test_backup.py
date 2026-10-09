@@ -113,6 +113,8 @@ class BackupApiTests(test_lan.LanTests):
         self.denied(403,self.manager,'/api/backups/create',{'airport':'SHI'},admin)
         self.denied(403,self.manager,'/api/backups/create',{'airport':'ROR'},{**admin,'Origin':'http://evil.invalid'})
         with self.request(self.manager,'/api/backups/create',{'airport':'ROR'},admin) as r:created=json.load(r)
+        with self.request(self.manager,'/api/backups',headers=admin) as r:listing=json.load(r)
+        self.assertIn(created['id'],[item['id'] for item in listing['backups']])
         with self.request(self.manager,'/api/backups/download?id='+created['id'],headers=admin) as r:body=r.read()
         request=Request(self.manager+'/api/backups/upload',data=body,headers={**admin,'Content-Type':'application/zip'})
         with urlopen(request,timeout=5) as r:reviewed=json.load(r)

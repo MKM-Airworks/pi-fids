@@ -1,5 +1,6 @@
 """Separate read-only LAN feed; the management UI stays on localhost."""
 import json
+import logging
 from urllib.parse import parse_qs, urlparse
 
 from .__main__ import ROOT, handler
@@ -37,7 +38,11 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                     if path=='/api/backups':return self.send(200,backups.status())
                     identifier=parse_qs(urlparse(self.path).query).get('id',[''])[0]
                     return self.send(200,backups.path(identifier).read_bytes(),'application/zip')
-                except (ValueError,OSError):return self.send(400,{'error':'Backup not found'})
+                except (ValueError,OSError):
+                    if path=='/api/backups':
+                        logging.exception('Backup listing failed')
+                        return self.send(500,{'error':'Unable to load backup list. Saved backups have not been deleted.'})
+                    return self.send(400,{'error':'Backup not found'})
             if path=='/api/users':
                 return self.send(200,security.listing())
             if path=='/api/audit':
