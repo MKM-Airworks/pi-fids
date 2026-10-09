@@ -40,6 +40,11 @@ def handler(store, upstream=None, os_clock=None):
                 self.send(200, {'authenticated':True, 'airport':None, 'secured':False})
             elif url.path == '/api/sites':
                 self.send(200, store.airports())
+            elif url.path == '/api/audit-settings':
+                try:
+                    query=parse_qs(url.query)
+                    self.send(200,store.audit_retention(query.get('airport',['SHI'])[0]))
+                except ValueError as error:self.send(400,{'error':str(error)})
             elif url.path == '/api/upstream':
                 try:
                     query = parse_qs(url.query)
@@ -108,6 +113,8 @@ def handler(store, upstream=None, os_clock=None):
                     store.save_airport_name(data)
                 elif self.path == '/api/flights':
                     store.add(data)
+                elif self.path == '/api/audit-settings':
+                    store.save_audit_retention(data.get('airport'),data.get('hours'))
                 elif self.path == '/api/upstream/mode':
                     if upstream is None:raise ValueError('Web connection is not configured')
                     upstream.set_mode(data.get('airport'),data.get('mode'))
@@ -138,7 +145,7 @@ def handler(store, upstream=None, os_clock=None):
                     store.set_display(data)
                 else:
                     return self.send(404, {'error': 'Not found'})
-                if self.path not in ('/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/import','/api/upstream/check','/api/upstream/mode'):
+                if self.path not in ('/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/import','/api/upstream/check','/api/upstream/mode','/api/audit-settings'):
                     safe={key:value for key,value in data.items() if key not in ('body','token','password','credential')}
                     store.record_audit(data.get('airport'),self.path.removeprefix('/api/').replace('/','.'),data.get('displayId',data.get('code',data.get('name',''))),None,safe)
                 self.send(200, {'ok': True})
@@ -208,5 +215,11 @@ if __name__ == '__main__':
         threading.Thread(target=lan_server.serve_forever, daemon=True).start()
         print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)
+    def audit_cleanup():
+        while True:
+            try:store.purge_audit()
+            except Exception:pass
+            threading.Event().wait(60)
+    threading.Thread(target=audit_cleanup,name='Audit retention',daemon=True).start()
     if upstream:upstream.start()
     server.serve_forever()

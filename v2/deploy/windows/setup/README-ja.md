@@ -23,3 +23,9 @@ python Build-Payload.py --runtime windows-runtime.zip --output PiFids-Semi-Setup
 ①のWeb欄で管理者がモードを選択して保存します。初期設定は手動。連携には別途契約・接続設定が必要です。接続状態と確認日時、最終受信・Web公開日時を表示します。自動では画面を閉じても毎分確認し、新しい配信・運航日の便を受信・公開します。同じ配信・運航日は再公開しません。通信・認証・検証失敗や対象期間外では最後の公開を保持します。未公開の手動変更があれば確認・公開を待ちます。同一運航日の遅延・ゲート・実績時刻などは再取り込みでも保持します。自動処理も監査ログに記録します。
 
 An administrator chooses Manual or Automatic reception & publication in section 1. Manual is the default. A separate subscription and connection settings are required. Automatic mode checks every minute even with the browser closed and publishes new versions or service dates. Repeated versions are not republished. Connection, credential, validation or applicability failures preserve the last published data. Unpublished manual edits pause publication until reviewed and published. Same-day local operational overrides are preserved. Automatic changes are audited.
+
+## 監査ログの保存期間 / Audit retention
+
+⑧監査ログで管理者が24・72・168・720時間を選択して保存します。初期値は72時間（3日）。管理画面を閉じても毎分確認し、期限を超えた記録を自動削除します。設定保存時にも期限超過分を削除します。削除した記録は復元できません。
+
+In section 8, administrators select 24, 72, 168 or 720 hours. The default is 72 hours (3 days). Expired records are deleted every minute even with the browser closed, and when settings are saved. Deleted records cannot be restored.

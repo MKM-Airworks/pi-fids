@@ -99,6 +99,8 @@ class Store:
         self.audit_context = threading.local()
         with self.connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT,occurred_at TEXT NOT NULL,airport TEXT NOT NULL,actor TEXT NOT NULL,role TEXT NOT NULL,source TEXT NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,before_json TEXT NOT NULL,after_json TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS audit_settings (airport TEXT PRIMARY KEY,hours INTEGER NOT NULL)')
+            db.execute('CREATE INDEX IF NOT EXISTS audit_time_idx ON audit_log (airport,occurred_at)')
             db.execute('CREATE TABLE IF NOT EXISTS site_settings (airport TEXT PRIMARY KEY,timezone TEXT NOT NULL)')
             db.executemany('INSERT OR IGNORE INTO site_settings VALUES (?,?)', sites.DEFAULT_ZONES.items())
             db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
@@ -153,6 +155,35 @@ class Store:
         with self.connect() as db:
             rows=db.execute('SELECT id,occurred_at,actor,role,source,action,target,before_json,after_json FROM audit_log WHERE airport=? AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 100',(airport,before_id,before_id)).fetchall()
         return [dict(id=r[0],occurredAt=r[1],actor=r[2],role=r[3],source=r[4],action=r[5],target=r[6],before=json.loads(r[7]),after=json.loads(r[8])) for r in rows]
+
+    def audit_retention(self, airport):
+        self.timezone(airport)
+        with self.connect() as db:
+            row=db.execute('SELECT hours FROM audit_settings WHERE airport=?',(airport,)).fetchone()
+        return {'hours':row[0] if row else 72,'choices':[24,72,168,720]}
+
+    def _purge_audit(self, db, airport, hours, now):
+        return db.execute("DELETE FROM audit_log WHERE airport=? AND julianday(occurred_at)<julianday(?)-?/24.0",(airport,now,hours)).rowcount
+
+    def save_audit_retention(self, airport, hours):
+        self.timezone(airport)
+        if type(hours) is not int or hours not in (24,72,168,720):raise ValueError('Choose 24, 72, 168 or 720 hours')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT hours FROM audit_settings WHERE airport=?',(airport,)).fetchone()
+            old=row[0] if row else 72
+            db.execute('INSERT INTO audit_settings VALUES (?,?) ON CONFLICT(airport) DO UPDATE SET hours=excluded.hours',(airport,hours))
+            self.audit(db,airport,'audit.retention','audit log',{'hours':old},{'hours':hours})
+            self._purge_audit(db,airport,hours,datetime.now(timezone.utc).isoformat())
+
+    def purge_audit(self, now=None):
+        now=now or datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            airports=db.execute('SELECT DISTINCT airport FROM audit_log').fetchall()
+            for (airport,) in airports:
+                setting=db.execute('SELECT hours FROM audit_settings WHERE airport=?',(airport,)).fetchone()
+                self._purge_audit(db,airport,setting[0] if setting else 72,now)
 
     def configure_site(self, airport, zone):
         sites.airport_code(airport); sites.timezone_name(zone)

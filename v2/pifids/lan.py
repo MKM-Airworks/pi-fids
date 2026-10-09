@@ -24,7 +24,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.end_headers()
                 return
             identity=security.identity(self.headers)
-            if path in ('/api/users','/api/audit','/api/clock') and identity['role']!='admin':
+            if path in ('/api/users','/api/audit','/api/audit-settings','/api/clock') and identity['role']!='admin':
                 return self.send(403,{'error':'Administrator access required'})
             if path=='/api/users':
                 return self.send(200,security.listing())
@@ -36,7 +36,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                     cursor=query.get('beforeId',[None])[0]
                     return self.send(200,store.audit_records(airport,int(cursor) if cursor else None))
                 except ValueError as error:return self.send(400,{'error':str(error)})
-            scoped_paths = ('/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
+            scoped_paths = ('/api/audit-settings','/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
                 return self.send(403, {'error':'Airport access denied'})
