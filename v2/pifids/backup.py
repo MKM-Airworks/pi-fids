@@ -192,12 +192,19 @@ class Backups:
             if sum(map(len,payload.values()))>MAX_BYTES:raise ValueError('Backup is too large')
             manifest={'format':FORMAT,'airport':airport,'createdAt':datetime.now(timezone.utc).isoformat(),'files':{name:{'bytes':len(body),'sha256':digest(body)} for name,body in payload.items()}}
             identifier=uuid.uuid4().hex;output=self.root/(identifier+'.zip')
-            private(root/'snapshot.zip',b'')
-            with zipfile.ZipFile(root/'snapshot.zip','w',zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr('manifest.json',encoded(manifest))
-                for name,body in payload.items():archive.writestr(name,body)
-            inspect_archive(root/'snapshot.zip',airport)
-            os.replace(root/'snapshot.zip',output)
+            # Windows TemporaryDirectory has a restrictive creator-token ACL.
+            # Create the archive in the destination directory so it inherits
+            # the backup directory's ACL, including the ordinary logon user.
+            pending=self.root/(identifier+'.pending')
+            private(pending,b'')
+            try:
+                with zipfile.ZipFile(pending,'w',zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr('manifest.json',encoded(manifest))
+                    for name,body in payload.items():archive.writestr(name,body)
+                inspect_archive(pending,airport)
+                os.replace(pending,output)
+            finally:
+                if pending.exists():pending.unlink()
             return {'id':identifier,**manifest,'summary':summary}
 
     def path(self, identifier):

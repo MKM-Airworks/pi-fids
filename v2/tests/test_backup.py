@@ -45,6 +45,25 @@ class BackupTests(unittest.TestCase):
     def rehash(self,payload,name,body):
         payload[name]=body;manifest=json.loads(payload['manifest.json']);manifest['files'][name]={'bytes':len(body),'sha256':digest(body)};payload['manifest.json']=encoded(manifest)
 
+    def test_archive_uses_destination_permissions_and_cleans_pending(self):
+        from unittest.mock import patch
+        from pifids import backup
+        paths=[]
+        original=backup.private
+        def record(path,body):
+            paths.append(Path(path))
+            return original(path,body)
+        with patch.object(backup,'private',side_effect=record):
+            archive=self.archive()
+        pending=[path for path in paths if path.suffix=='.pending']
+        self.assertEqual(len(pending),1)
+        self.assertEqual(pending[0].parent,self.service.root)
+        self.assertFalse(pending[0].exists())
+        self.assertTrue(archive.is_file())
+        with patch.object(backup.zipfile.ZipFile,'writestr',side_effect=OSError('synthetic write failure')):
+            with self.assertRaises(OSError):self.service.create()
+        self.assertEqual(list(self.service.root.glob('*.pending')),[])
+
     def test_roundtrip_snapshot_users_images_and_live_data_unchanged(self):
         original=self.store.feed('SHI','counter-01');archive=self.archive()
         self.store.add({'airport':'SHI','flightNumber':'NEW2','destination':'Kobe','time':'11:00'})
