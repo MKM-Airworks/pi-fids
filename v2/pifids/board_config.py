@@ -14,6 +14,12 @@ def validate(data):
         result[key]=[x for x in COLUMNS if x in columns]
     logo=data.get('logo','')
     if not isinstance(logo,str) or (logo and not re.fullmatch('[a-f0-9]{64}',logo)):raise ValueError('Invalid board logo')
+    languages=data.get('languages',['en','ja'])
+    if not isinstance(languages,list) or not languages or any(x not in ('en','ja','zh-Hans','zh-Hant','ko') for x in languages) or len(set(languages))!=len(languages):raise ValueError('Select unique terminal languages in display order')
+    interval=data.get('languageInterval',8)
+    if type(interval) is not int or not 3<=interval<=60:raise ValueError('Language interval must be 3 to 60 seconds')
+    result['languages']=languages
+    result['languageInterval']=interval
     result['logo']=logo
     return result
 

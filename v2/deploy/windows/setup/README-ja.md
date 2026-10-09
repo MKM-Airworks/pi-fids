@@ -29,3 +29,9 @@ An administrator chooses Manual or Automatic reception & publication in section 
 ⑧監査ログで管理者が24・72・168・720時間を選択して保存します。初期値は72時間（3日）。管理画面を閉じても毎分確認し、期限を超えた記録を自動削除します。設定保存時にも期限超過分を削除します。削除した記録は復元できません。
 
 In section 8, administrators select 24, 72, 168 or 720 hours. The default is 72 hours (3 days). Expired records are deleted every minute even with the browser closed, and when settings are saved. Deleted records cannot be restored.
+
+## 便一覧の表示言語 / Flight board languages
+
+③端末の設定でフライト情報表示の端末を選び、言語を追加し↑↓で順序を変更します。英語→日本語、英語→日本語→中国語（簡体・繁体）などを端末ごとに保存できます。切替間隔は3〜60秒（初期8秒）。初期順序は英語→日本語です。見出し・全便の言語を同時に切り替え、便ごとの従来言語指定は使いません。
+
+In section 3, select a flight board terminal, add languages and reorder with ↑/↓. Each terminal rotates its headings and all flights together, for example English → Japanese → Chinese (Simplified or Traditional). The interval is 3–60 seconds (default 8), with English → Japanese as the default. Previous per-flight language overrides are no longer used for display.

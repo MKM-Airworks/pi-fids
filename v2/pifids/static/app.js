@@ -24,8 +24,8 @@ function table(rows,display=false,draft=false){
  for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','備考','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
  const body=board.createTBody();
  for(const flight of rows){
-  const row=body.insertRow();const langs=flight.languages?.length?flight.languages:[settings.language];row.lang=langs[Math.floor(fidsNow()/1000/settings.interval)%langs.length];
-  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),'',flight.flightNumber,flight.gate||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',langs.map(x=>names[x]).join(' → ')];
+  const row=body.insertRow();const langs=display?[settings.language]:[];row.lang=settings.language;
+  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),'',flight.flightNumber,flight.gate||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',mt('端末ごとに設定')];
   const shown=display?columns.map(key=>values[BoardPolicy.columns.indexOf(key)]):values;
   for(const value of shown){const cell=row.insertCell();cell.textContent=value;}
   if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
@@ -47,6 +47,7 @@ function table(rows,display=false,draft=false){
 function render(){
  if(!state)return;
  if(manager){updateEditorLabels();$('draft').replaceChildren(state.draft.length?table(state.draft,false,true):emptyManager('下書きの便はありません。便を追加するかWebから取り込んでください。'));$('published').replaceChildren(state.flights.length?table(state.flights):emptyManager('公開済みの便はありません。下書きを確認して公開してください。'));return;}
+ if(displayConfig.mode==='board'){settings.language=BoardPolicy.language(displayConfig.board,fidsNow());settings.interval=displayConfig.board?.languageInterval||8;}
  const mode=displayConfig.mode, fullImage=mode!=='board'&&!!assetUrls[displayConfig.image];
  const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.classList.toggle('image-only',fullImage);
  const labels=words[settings.language]||words.en;
@@ -177,7 +178,7 @@ async function loadDisplayControl(){
  if(revision!==displayFormRevision||identity[0]!==$('airport').value||identity[1]!==$('displayId').value)return;
  for(const key of ['departureHideMinutes','arrivalHideMinutes'])$('displayForm').elements[key].value=control[key];
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
- $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';
+ $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;
  for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
  $('terminalProfile').replaceChildren();for(const profile of [{name:mt('なし'),value:''},...registryState.profiles.map(p=>({name:p.name,value:p.name}))]){const option=document.createElement('option');option.value=profile.value;option.textContent=profile.name;$('terminalProfile').append(option);}$('terminalProfile').value=terminal?.profileName||'';boardFormVisibility();
 }
@@ -247,7 +248,7 @@ if(manager){
 
 function boardDirection(){return displayConfig.board?.direction||settings.direction;}
 function boardColumns(){return BoardPolicy.selectedColumns(displayConfig.board,boardDirection());}
-function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
+function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value)};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
 function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalUsage').value!=='signage';
  const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;
  for(const input of $('boardTerminalSettings').querySelectorAll('input,select'))input.disabled=!board;
@@ -345,3 +346,8 @@ function renderWebSync(result){
 if(manager)$('saveUpstreamMode').onclick=async()=>{try{const mode=$('upstreamMode').value;if(mode==='auto'&&!confirm(mt('自動受信・公開を開始します。新しいWeb配信は確認なしで表示へ反映されます。よろしいですか？')))return;await post('/api/upstream/mode',{airport:$('airport').value,mode});delete $('upstreamMode').dataset.dirty;await refreshUpstream($('airport').value);}catch(error){$('message').textContent=error.message;}};
 
 if(manager)$('upstreamMode').onchange=()=>{$('upstreamMode').dataset.dirty='true';};
+
+let terminalLanguages=['en','ja'];
+function loadTerminalLanguages(languages){terminalLanguages=[...languages];renderTerminalLanguages();}
+function renderTerminalLanguages(){const area=$('terminalLanguageOrder');area.replaceChildren();for(const [index,code] of terminalLanguages.entries()){const row=document.createElement('div'),text=document.createElement('span');text.textContent=(index+1)+'. '+names[code];row.append(text);for(const [label,offset] of [['↑',-1],['↓',1],['×',0]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.setAttribute('aria-label',label==='×'?mt('言語を削除'):label==='↑'?mt('言語を前へ'):mt('言語を後へ'));b.disabled=offset<0?index===0:offset>0?index===terminalLanguages.length-1:terminalLanguages.length===1;b.onclick=()=>{if(offset){const next=index+offset;[terminalLanguages[index],terminalLanguages[next]]=[terminalLanguages[next],terminalLanguages[index]];}else terminalLanguages.splice(index,1);renderTerminalLanguages();};row.append(b);}area.append(row);}}
+if(manager){$('addTerminalLanguage').onclick=()=>{const code=$('terminalLanguageChoice').value;if(!terminalLanguages.includes(code)){terminalLanguages.push(code);renderTerminalLanguages();}};loadTerminalLanguages(['en','ja']);}

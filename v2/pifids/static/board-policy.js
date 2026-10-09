@@ -26,7 +26,8 @@
  const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];
  function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)):[...columns];}
  function synchronizedClock(utcNow,wallNow=Date.now(),monotonicNow=0){const epoch=Date.parse(utcNow);if(!Number.isFinite(epoch))throw Error('Invalid clock');return {now:mono=>epoch+mono-monotonicNow,offset:epoch-wallNow};}
- const api={configureTimezone,synchronizedClock,today,timestamp,effective,deadline,visible,columns,selectedColumns};
+ function language(config,now=Date.now()){const languages=config?.languages?.length?config.languages:['en','ja'];const interval=config?.languageInterval||8;return languages[Math.floor(now/1000/interval)%languages.length];}
+ const api={language,configureTimezone,synchronizedClock,today,timestamp,effective,deadline,visible,columns,selectedColumns};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  else root.BoardPolicy=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -58,3 +58,11 @@ test('installation timezone handles overseas dates and seasonal offsets',()=>{
   assert.equal(p.timestamp('2026-10-08','10:00'),Date.parse('2026-10-08T03:00:00Z'));
  }finally{p.configureTimezone('Asia/Tokyo');}
 });
+
+test('terminal languages rotate in order, independently on each screen',()=>{
+ const first={languages:['en','ja'],languageInterval:8};
+ const second={languages:['en','ja','zh-Hans'],languageInterval:10};
+ assert.equal(p.language(first,0),'en');assert.equal(p.language(first,8000),'ja');assert.equal(p.language(first,16000),'en');
+ assert.equal(p.language(second,10000),'ja');assert.equal(p.language(second,20000),'zh-Hans');assert.equal(p.language(second,30000),'en');
+ assert.equal(p.language({languages:['ja'],languageInterval:8},24000),'ja');
+});

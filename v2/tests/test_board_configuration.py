@@ -13,7 +13,7 @@ class ConfigurationTests(unittest.TestCase):
         self.store=Store(Path(self.temp.name)/'manager.sqlite')
     def test_separate_departure_arrival_columns_receiver_and_purpose(self):
         logo=self.store.upload_asset(dict(airport='ROR',name='Airport logo',body=base64.b64encode(png()).decode(),kind='logo'))
-        board=dict(direction='arrival',departureColumns=['scheduled','flight'],arrivalColumns=['destination','flight','remark'],logo=logo)
+        board=dict(languages=['en','ja','zh-Hans'],languageInterval=10,direction='arrival',departureColumns=['scheduled','flight'],arrivalColumns=['destination','flight','remark'],logo=logo)
         registry.save_terminal(self.store,dict(airport='ROR',displayId='arrivals-01',name='Arrival lobby',usage='board',board=board,arrivalHideMinutes=180))
         control=self.store.display('ROR','arrivals-01');self.assertEqual(control['board'],board);self.assertEqual(control['mode'],'board')
         registry.save_profile(self.store,dict(airport='ROR',name='JX Business',mode='counter',airline='STARLUX'))
@@ -22,7 +22,7 @@ class ConfigurationTests(unittest.TestCase):
         receiver.accept('ROR','arrivals-01',feed,feed['control'],{logo:png()})
         restored=ReceiverStore(receiver.path)
         self.assertEqual(restored.display('ROR','arrivals-01')['board'],board);self.assertEqual(restored.asset('ROR',logo)[1],png())
-        for patch in ({'direction':'both'},{'departureColumns':[]},{'arrivalColumns':['secret']},{'arrivalColumns':['flight','flight']}):
+        for patch in ({'direction':'both'},{'departureColumns':[]},{'arrivalColumns':['secret']},{'arrivalColumns':['flight','flight']},{'languages':[]},{'languages':['en','en']},{'languages':['xx']},{'languageInterval':2},{'languageInterval':True}):
             with self.assertRaises(ValueError):board_config.validate({**board,**patch})
         registry.save_terminal(self.store,dict(airport='ROR',displayId='gate-01',name='Gate 01',usage='signage'))
         registry.apply(self.store,dict(airport='ROR',displayId='gate-01',profileName='JX Business'))
@@ -36,3 +36,8 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):registry.save_profile(self.store,dict(airport='ROR',name='Logo as artwork',mode='gate',airline='JX',image=logo))
         registry.save_profile(self.store,dict(airport='ROR',name='JX Business',mode='counter',airline='JX',image=image))
         self.assertEqual(len(self.store.assets('ROR')),2)
+
+    def test_legacy_settings_get_terminal_defaults(self):
+        config=board_config.validate({'direction':'departure'})
+        self.assertEqual(config['languages'],['en','ja'])
+        self.assertEqual(config['languageInterval'],8)
