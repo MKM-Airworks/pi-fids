@@ -15,7 +15,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .__main__ import handler
 from .store import Store, validate, retention
 from .security import validate_source
-from . import board_config, clock_sync, airport_names, sites
+from . import airline_names, board_config, clock_sync, airport_names, sites
 
 
 class ReceiverStore(Store):
@@ -35,6 +35,7 @@ class ReceiverStore(Store):
         for version in (state.get('version'), control.get('version')):
             if type(version) is not int or not 0 <= version <= 2147483647:
                 raise ValueError('Invalid version')
+        airlines=airline_names.validate(state.get('airlineNames',{}))
         directory=airport_names.validate(state.get('airportNames',{}))
         clock=state.get('clock')
         if clock is not None:clock_sync.validate(clock)
@@ -62,6 +63,7 @@ class ReceiverStore(Store):
                 raise ValueError('Older publication rejected')
             if clock is not None:clock_sync.accept(db,clock)
             airport_names.write(db,airport,directory)
+            airline_names.write(db,airport,airlines)
             board_config.write(db,airport,display_id,board)
             db.execute('UPDATE state SET published=?,version=? WHERE airport=?', (json.dumps(flights,ensure_ascii=False),state['version'],airport))
             db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))

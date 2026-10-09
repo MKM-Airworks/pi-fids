@@ -109,7 +109,9 @@ def handler(store, upstream=None, os_clock=None):
                 data = json.loads(self.rfile.read(size))
                 if self.path == '/api/assets':
                     return self.send(200, {'digest': store.upload_asset(data)})
-                if self.path == '/api/airport-names':
+                if self.path == '/api/airline-names':
+                    store.save_airline_name(data)
+                elif self.path == '/api/airport-names':
                     store.save_airport_name(data)
                 elif self.path == '/api/flights':
                     store.add(data)

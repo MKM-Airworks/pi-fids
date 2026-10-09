@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from . import airport_names, sites
+from . import airport_names, airline_names, sites
 from zoneinfo import ZoneInfo
 import base64
 import hashlib
@@ -103,6 +103,7 @@ class Store:
             db.execute('CREATE INDEX IF NOT EXISTS audit_time_idx ON audit_log (airport,occurred_at)')
             db.execute('CREATE TABLE IF NOT EXISTS site_settings (airport TEXT PRIMARY KEY,timezone TEXT NOT NULL)')
             db.executemany('INSERT OR IGNORE INTO site_settings VALUES (?,?)', sites.DEFAULT_ZONES.items())
+            db.execute('CREATE TABLE IF NOT EXISTS airline_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS clock_state (id INTEGER PRIMARY KEY,offset REAL NOT NULL,revision INTEGER NOT NULL,last_sync TEXT,source TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS board_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
@@ -209,7 +210,7 @@ class Store:
         self.timezone(airport)
         with self.connect() as db:
             row = db.execute('SELECT draft,published,version,draft_revision FROM state WHERE airport=?', (airport,)).fetchone()
-        return {'timezone':self.timezone(airport), 'airportNames':self.airport_names(airport), 'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
+        return {'timezone':self.timezone(airport), 'airlineNames':self.airline_names(airport), 'airportNames':self.airport_names(airport), 'airport': airport, 'draft': json.loads(row[0]), 'flights': json.loads(row[1]), 'version': row[2], 'preview': True, 'draftRevision': row[3]}
 
     def airport_names(self, airport):
         self.timezone(airport)
@@ -226,6 +227,23 @@ class Store:
             current.update(entry)
             current=airport_names.validate(current)
             airport_names.write(db,airport,current)
+            db.execute('UPDATE state SET version=version+1 WHERE airport=?',(airport,))
+
+    def airline_names(self, airport):
+        self.timezone(airport)
+        with self.connect() as db:return airline_names.read(db,airport)
+
+    def save_airline_name(self, data):
+        airport=data.get('airport')
+        self.timezone(airport)
+        code=data.get('code','').strip().upper()
+        entry=airline_names.validate({code:data.get('names')})
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            current=airline_names.read(db,airport)
+            current.update(entry)
+            current=airline_names.validate(current)
+            airline_names.write(db,airport,current)
             db.execute('UPDATE state SET version=version+1 WHERE airport=?',(airport,))
 
     def add(self, data):
@@ -297,7 +315,7 @@ class Store:
             board = board_config.read(db,airport,display_id)
             clock=clock_sync.info(db)
             directory=airport_names.read(db,airport)
-        return {'timezone':self.timezone(airport), 'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
+        return {'timezone':self.timezone(airport), 'airlineNames':self.airline_names(airport), 'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
                 'control':{'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
 
     def display(self, airport, display_id):
