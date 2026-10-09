@@ -72,3 +72,20 @@ On other platforms, `python3 -m pifids.backup <ZIP> --airport SHI --output <new-
 現行表示端末は、受信済みより古い便・表示設定の版を拒否します。古いバックアップを復元すると、この理由で端末が最後の画面を保持する場合があります。端末の受信済み版と復元した版を確認し、版を揃える復旧処理を実施するまでは配信再開完了としません。管理世代による正式な切替は次段階の実装です。本機能は検証済み復元フォルダーの準備までを提供します。
 
 Current receivers reject flight/control revisions older than those already stored. An older restored backup may therefore leave a terminal on its last screen. Compare receiver and restored revisions; do not declare distribution restored until a revision reconciliation procedure has been completed. Formal manager-generation switching is the next implementation stage. This feature provides preparation of a validated recovery folder.
+
+
+## 復元起動試験の記録 / Recovery startup rehearsal
+
+2026-10-09 15:51 JST頃、SHI管理PCの通常ログイン権限で、同日15:47 JST作成のバックアップを新しい別フォルダーへ復元し、8810番のlocalhost管理画面として起動した。
+
+- 公開便15件、画像7点、登録端末4台、ユーザー1名を検証。公開便・画像一覧・ユーザー設定は稼働データと一致した。
+- 復元画面の空港SHI、ログイン必須、未認証データ取得の拒否を確認した。
+- 復元側のWeb自動受信・公開は停止し、LAN配信を有効にしなかった。
+- 元の8800番管理アプリの継続稼働を確認した。試験用管理アプリは確認後に停止した。
+- 結果は復元フォルダー内の `rehearsal-result.json` に保存した。
+
+これは同一PC上の隔離した復元・起動試験である。別PCへの移設、ログイン操作、表示端末の接続切替、NTP変更、主PC故障時の配信再開は未検証。管理PCと表示PCの2台のみのため、予備管理PCを用意してから別PCでの切替試験を行う。
+
+On 9 October 2026, a SHI backup created at 15:47 JST was restored into a new folder and launched on localhost port 8810 under the ordinary Windows logon user's permissions. The rehearsal verified 15 published flights, 7 images, 4 registered displays and 1 user. Published flights, image inventory and user settings matched the live manager. The restored service required authentication and rejected unauthenticated data access. Web automatic publication remained disabled and no LAN feed was started. The live manager on port 8800 continued running; the test manager was stopped afterwards. Results were saved as `rehearsal-result.json` in the recovery folder.
+
+This was an isolated rehearsal on the same PC. Replacement-PC migration, an actual login, display reconnection, NTP changes and distribution after primary-PC failure remain untested. A separate standby management PC is required for the next hardware takeover test.
