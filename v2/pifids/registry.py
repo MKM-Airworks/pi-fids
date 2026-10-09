@@ -1,7 +1,7 @@
 """Named terminals and reusable signage choices, owned by the local manager."""
 import sqlite3
 from .store import retention
-from . import board_config
+from . import board_config, signage_config
 
 
 def init(store):
@@ -27,6 +27,7 @@ def listing(store,airport):
         profiles=[dict(zip(('name','mode','airline','logo','image'),row)) for row in db.execute('SELECT name,mode,airline,logo,image FROM signage_profiles WHERE airport=? ORDER BY name',(airport,))]
     for terminal in terminals:
         control=store.display(airport,terminal['displayId'])
+        terminal['signage']=control['signage']
         terminal['direction']=(control.get('board') or {}).get('direction','departure')
         terminal['currentDisplay']=terminal['profileName'] or (control['airline'] if control['mode']!='board' else '')
     return dict(terminals=terminals,profiles=profiles)
@@ -42,12 +43,22 @@ def save_terminal(store,data):
     if board and board['logo']:
         store.asset(airport,board['logo'])
         if any(x['digest']==board['logo'] and x['kind']=='signage' for x in store.assets(airport)):raise ValueError('Select a flight information logo')
+    if 'defaultImage' in data:
+        candidate=signage_config.validate({'defaultImage':data['defaultImage']})['defaultImage']
+        if candidate:store.asset(airport,candidate)
     try:
         with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute('DELETE FROM deleted_terminals WHERE airport=? AND display_id=?',(airport,display_id))
             db.execute('INSERT INTO terminals VALUES (?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET name=excluded.name',(airport,display_id,name))
             db.execute('INSERT INTO displays VALUES (?,?,\'board\',\'\',1) ON CONFLICT(airport,display_id) DO UPDATE SET version=displays.version+1',(airport,display_id))
+            signage=signage_config.read(db,airport,display_id)
+            if 'defaultImage' in data:signage['defaultImage']=candidate
+            if usage is not None:signage['enabled']=usage=='signage'
+            if usage=='board':signage.update(start='',end='',date='')
+            signage_config.write(db,airport,display_id,signage)
+            if usage=='signage':
+                db.execute("UPDATE displays SET mode='counter',airline='MKM Airworks' WHERE airport=? AND display_id=? AND mode='board'",(airport,display_id))
             if usage is not None:
                 db.execute('INSERT OR REPLACE INTO terminal_purpose VALUES (?,?,?)',(airport,display_id,usage))
             if usage=='board':
@@ -94,6 +105,12 @@ def apply(store,data):
             row=db.execute('SELECT mode,airline,logo,image FROM signage_profiles WHERE airport=? AND name=?',(airport,name)).fetchone()
             if not row:raise ValueError('Display layout not found for airport')
             mode,airline,logo,image=row
+        signage=signage_config.read(db,airport,display_id)
+        signage['enabled']=True
+        if any(k in data for k in ('start','end','date')):
+            signage.update({k:data.get(k,'') for k in ('start','end','date')})
+        if not profile_name:signage.update(start='',end='',date='')
+        signage_config.write(db,airport,display_id,signage)
         db.execute('INSERT INTO displays VALUES (?,?,?,?,1) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=displays.version+1',(airport,display_id,mode,airline))
         db.execute('INSERT INTO display_assets VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET logo=excluded.logo,image=excluded.image',(airport,display_id,logo,image))
         version=db.execute('SELECT version FROM displays WHERE airport=? AND display_id=?',(airport,display_id)).fetchone()[0]
@@ -106,5 +123,5 @@ def delete_terminal(store,data):
         db.execute('BEGIN IMMEDIATE')
         if not db.execute('SELECT 1 FROM terminals WHERE airport=? AND display_id=?',(airport,display_id)).fetchone():raise ValueError('Terminal not found')
         db.execute('INSERT OR IGNORE INTO deleted_terminals VALUES (?,?)',(airport,display_id))
-        for table in ('terminals','terminal_purpose','terminal_layouts','displays','display_assets','display_timing','board_settings'):
+        for table in ('terminals','terminal_purpose','terminal_layouts','displays','display_assets','display_timing','board_settings','signage_settings'):
             db.execute('DELETE FROM '+table+' WHERE airport=? AND display_id=?',(airport,display_id))

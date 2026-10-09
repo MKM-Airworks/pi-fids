@@ -41,7 +41,7 @@ function table(rows,display=false,draft=false){
    }
   }
   const effectiveLogo=airlineEntry(flight.flightNumber)?.logo||flight.airlineLogo;
-  if(display&&columns.includes('airline')&&effectiveLogo&&assetUrls[effectiveLogo]){const logo=document.createElement('img');logo.className='flight-logo';logo.alt=flight.flightNumber+' 航空会社ロゴ';logo.src=assetUrls[effectiveLogo];row.cells[columns.indexOf('airline')].replaceChildren(logo);}
+  if(display&&columns.includes('airline')&&effectiveLogo&&assetUrls[effectiveLogo]){const logo=document.createElement('img');logo.className='flight-logo';logo.alt=flight.flightNumber+' 航空会社ロゴ';logo.src=assetUrls[effectiveLogo];row.cells[columns.indexOf('airline')].classList.add('airline-logo-cell');row.cells[columns.indexOf('airline')].replaceChildren(logo);}
  }
  return board;
 }
@@ -49,7 +49,9 @@ function render(){
  if(!state)return;
  if(manager){updateEditorLabels();$('draft').replaceChildren(state.draft.length?table(state.draft,false,true):emptyManager('下書きの便はありません。便を追加するかWebから取り込んでください。'));$('published').replaceChildren(state.flights.length?table(state.flights):emptyManager('公開済みの便はありません。下書きを確認して公開してください。'));return;}
  if(displayConfig.mode==='board'){settings.language=BoardPolicy.language(displayConfig.board,fidsNow());settings.interval=displayConfig.board?.languageInterval||8;}
- const mode=displayConfig.mode, fullImage=mode!=='board'&&!!assetUrls[displayConfig.image];
+ const fallback=displayConfig.signage?.enabled&&(displayConfig.mode==='board'||displayConfig.airline==='MKM Airworks'&&!displayConfig.image&&!displayConfig.logo||!SignagePolicy.active(displayConfig.signage,fidsNow(),state.timezone));
+ const effectiveImage=fallback?(assetUrls[displayConfig.signage.defaultImage]||'/static/branding/mkm-airworks-horizontal.png'):assetUrls[displayConfig.image];
+ const mode=fallback?'counter':displayConfig.mode, fullImage=mode!=='board'&&!!effectiveImage;
  const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.classList.toggle('image-only',fullImage);
  const labels=words[settings.language]||words.en;
  const purposes={ja:['チェックイン','搭乗口'],en:['Check-in','Boarding gate'],'zh-Hant':['報到櫃檯','登機口'],'zh-Hans':['值机柜台','登机口'],ko:['체크인','탑승구']};
@@ -58,7 +60,7 @@ function render(){
  const visibleFlights=mode==='board'?BoardPolicy.visible(state.flights,arrival?'arrival':'departure',displayConfig,fidsNow()):[];
  const pages=Math.max(1,Math.ceil(visibleFlights.length/pageSize));
  const page=Math.floor(fidsNow()/1000/15)%pages;
- const renderKey=mode!=='board'?JSON.stringify([mode,displayConfig,settings.logo]):JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
+ const renderKey=mode!=='board'?JSON.stringify([mode,displayConfig,fallback,settings.logo]):JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
  $('status').textContent=(offline?'通信停止・保存済み表示 · ':'')+'画面 '+displayId+' · 表示指示 '+displayConfig.version+' · 版 '+state.version+' · 最終取得 '+lastSuccess.toLocaleTimeString();
  if(lastDisplayRenderKey===renderKey)return;lastDisplayRenderKey=renderKey;
  if(mode==='board'){
@@ -67,7 +69,7 @@ function render(){
   $('pageIndicator').textContent=(page+1)+' / '+pages;
  }else{
   const panel=document.createElement('section');panel.className='airline-sign';
-  if(fullImage){const image=document.createElement('img');image.className='sign-image';image.alt=displayConfig.airline+' · 案内画面';image.src=assetUrls[displayConfig.image];panel.classList.add('sign-with-image');panel.append(image);}
+  if(fullImage){const image=document.createElement('img');image.className='sign-image';image.alt=displayConfig.airline+' · 案内画面';image.src=effectiveImage;if(fallback){panel.style.background='#fff';image.alt='Default · MKM Airworks';}panel.classList.add('sign-with-image');panel.append(image);}
   else{
    const caption=document.createElement('p');caption.className='sign-purpose';caption.textContent=purpose;
    panel.append(caption);
@@ -101,13 +103,13 @@ async function post(path,data){const response=await fetch(path,{method:'POST',he
 if(manager){$('openFlightEditor').onclick=()=>{resetEditor();$('flightEditor').open=true;$('flightEditor').scrollIntoView({behavior:'smooth',block:'start'});};for(const [code,name]of Object.entries(names)){const label=document.createElement('label');const box=document.createElement('input');box.type='checkbox';box.onchange=()=>{selected=selected.filter(x=>x!==code);if(box.checked)selected.push(code);$('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');};label.append(box,document.createTextNode(name));$('languages').append(label);}$('airport').onchange=()=>{resetEditor();pendingDelete=null;refresh();};$('cancelEdit').onclick=resetEditor;$('flightForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));await post(editing?'/api/flights/update':'/api/flights',{...data,airport:$('airport').value,languages:selected,...(editing||{})});resetEditor();$('message').textContent=mt('下書きを保存しました。公開すると表示に反映されます。');}catch(error){$('message').textContent=error.message;}};$('publish').onclick=async()=>{try{await post('/api/publish',{airport:$('airport').value});$('message').textContent=mt('公開しました。');}catch(error){$('message').textContent=error.message;}};}else{for(const [code,name]of Object.entries(names)){const option=document.createElement('option');option.value=code;option.textContent=name;$('defaultLanguage').append(option);}$('defaultLanguage').value=settings.language;$('interval').value=settings.interval;$('logoUrl').value=settings.logo;$('rowsPerPage').value=settings.rows;$('boardDirection').value=settings.direction;function logo(){const image=$('airportLogo');image.hidden=!settings.logo;image.src=settings.logo;image.onerror=()=>image.hidden=true;}logo();$('saveSettings').onclick=()=>{const interval=Number($('interval').value);if(!Number.isFinite(interval)||interval<3||interval>60)return;const raw=$('logoUrl').value.trim();if(raw){try{const url=new URL(raw);if(!['http:','https:'].includes(url.protocol))return;}catch{return;}}const rows=Number($('rowsPerPage').value);if(!Number.isInteger(rows)||rows<4||rows>16)return;settings={language:$('defaultLanguage').value,interval,logo:raw,rows,direction:$('boardDirection').value};localStorage.setItem(settingsKey,JSON.stringify(settings));logo();render();};setInterval(()=>{$('clock').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:state?.timezone||(airport==='ROR'?'Pacific/Palau':'Asia/Tokyo'),hour:'2-digit',minute:'2-digit'}).format(new Date(fidsNow()));if(state)render();},1000);}
 
 
-if(manager){function targetLink(){$('targetDisplay').href='/display?airport='+encodeURIComponent($('airport').value)+'&displayId='+encodeURIComponent($('displayId').value)+'&preview=screens';} $('displayId').oninput=targetLink;$('loadDisplaySettings').onclick=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('displayId').onchange=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('airport').addEventListener('change',()=>{targetLink();loadDisplayControl().catch(error=>$('message').textContent=error.message);});$('displayForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));if(data.usage==='board')data.board=readBoardForm();for(const key of ['departureHideMinutes','arrivalHideMinutes'])data[key]=Number(data[key]);const profile=$('terminalProfile').value;await post('/api/terminals',{...data,airport:$('airport').value});if(data.usage==='signage'&&profile)await post('/api/signage',{airport:$('airport').value,displayId:data.displayId,profileName:profile});targetLink();$('message').textContent=mt('端末設定を保存しました。');}catch(error){$('message').textContent=error.message;}};}
+if(manager){function targetLink(){$('targetDisplay').href='/display?airport='+encodeURIComponent($('airport').value)+'&displayId='+encodeURIComponent($('displayId').value)+'&preview=screens';} $('displayId').oninput=targetLink;$('loadDisplaySettings').onclick=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('displayId').onchange=()=>loadDisplayControl().catch(error=>$('message').textContent=error.message);$('airport').addEventListener('change',()=>{targetLink();loadDisplayControl().catch(error=>$('message').textContent=error.message);});$('displayForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));if(data.usage==='board')data.board=readBoardForm();const defaultFile=$('defaultImageFile').files[0];if(defaultFile){if(defaultFile.size>2*1024*1024)throw Error(mt('画像は2MBまでです'));const body=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error(mt('画像読込失敗')));reader.readAsDataURL(defaultFile);});const uploaded=await post('/api/assets',{airport:$('airport').value,name:defaultFile.name,kind:'legacy',body});data.defaultImage=uploaded.digest;$('defaultImageFile').value='';}for(const key of ['departureHideMinutes','arrivalHideMinutes'])data[key]=Number(data[key]);const profile=$('terminalProfile').value;await post('/api/terminals',{...data,airport:$('airport').value});if(data.usage==='signage'&&profile)await post('/api/signage',{airport:$('airport').value,displayId:data.displayId,profileName:profile});targetLink();$('message').textContent=mt('端末設定を保存しました。');}catch(error){$('message').textContent=error.message;}};}
 
 const imageCacheName='pifids-images-v1';
 function imagePath(digest){return '/asset?airport='+encodeURIComponent(airport)+'&id='+digest;}
 async function prepareAssets(config,cachedOnly=false,flights=[],airlines={}){
  const cache=await caches.open(imageCacheName);const urls={};
- try{for(const digest of [...new Set([config.logo,config.image,config.board?.logo,...flights.map(flight=>flight.airlineLogo),...Object.values(airlines||{}).map(item=>item.logo)].filter(Boolean))]){
+ try{for(const digest of [...new Set([config.logo,config.image,config.board?.logo,config.signage?.defaultImage,...flights.map(flight=>flight.airlineLogo),...Object.values(airlines||{}).map(item=>item.logo)].filter(Boolean))]){
   const path=imagePath(digest);let response=await cache.match(path);
   if(!response&&!cachedOnly){response=await fetch(path);if(!response.ok)throw Error('画像取得失敗');const bytes=await response.clone().arrayBuffer();const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');if(hash!==digest)throw Error('画像の整合性エラー');await cache.put(path,response.clone());}
   if(!response)throw Error('保存済み画像なし');urls[digest]=URL.createObjectURL(await response.blob());
@@ -119,7 +121,7 @@ async function startDisplay(){
  await refresh();setInterval(refresh,5000);
 }
 async function refreshAssets(a){
- const response=await fetch('/api/assets?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('画像一覧取得失敗'));const items=await response.json();for(const id of ['logoAsset','imageAsset','flightLogo','boardLogo','airlineLogoAsset']){const select=$(id),old=select.value;select.replaceChildren();const none=document.createElement('option');none.value='';none.textContent=mt('なし');select.append(none);for(const item of items.filter(item=>item.kind==='legacy'||item.kind===(id==='imageAsset'?'signage':'logo'))){const option=document.createElement('option');option.value=item.digest;option.textContent=item.name;select.append(option);}select.value=items.some(item=>item.digest===old)?old:'';}
+ const response=await fetch('/api/assets?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('画像一覧取得失敗'));const items=await response.json();for(const id of ['logoAsset','imageAsset','flightLogo','boardLogo','airlineLogoAsset','defaultImage']){const select=$(id),old=select.value;select.replaceChildren();const none=document.createElement('option');none.value='';none.textContent=mt(id==='defaultImage'?'MKM Airworks（犬付きロゴ）':'なし');select.append(none);for(const item of items.filter(item=>id==='defaultImage'||item.kind==='legacy'||item.kind===(id==='imageAsset'?'signage':'logo'))){const option=document.createElement('option');option.value=item.digest;option.textContent=item.name;select.append(option);}select.value=items.some(item=>item.digest===old)?old:'';}
 }
 if(manager){$('assetForm').onsubmit=async event=>{event.preventDefault();try{const file=$('assetFile').files[0];if(!file||file.size>2*1024*1024)throw Error(mt('画像は2MBまでです'));const body=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error(mt('画像読込失敗')));reader.readAsDataURL(file);});const kind=$('assetKind').value,name=$('assetName').value.trim();const uploaded=await post('/api/assets',{airport:$('airport').value,name,kind,body});if(kind==='signage'){$('profileForm').reset();$('registeredProfile').value='';$('profileForm').elements.name.value=name;$('imageAsset').value=uploaded.digest;$('applySavedProfile').hidden=true;$('profileNext').textContent=mt('航空会社名と表示種別を確認し、表示画面を保存してください。');$('profileForm').scrollIntoView({behavior:'smooth',block:'center'});}$('message').textContent=mt('画像を登録しました。ロゴまたは案内画像を選んで画面に適用してください。');}catch(error){$('message').textContent=error.message;}};}
 
@@ -178,6 +180,7 @@ async function loadDisplayControl(){
  const control=await response.json();if(!response.ok)throw Error(control.error);
  if(revision!==displayFormRevision||identity[0]!==$('airport').value||identity[1]!==$('displayId').value)return;
  for(const key of ['departureHideMinutes','arrivalHideMinutes'])$('displayForm').elements[key].value=control[key];
+ $('defaultImage').value=control.signage?.defaultImage||'';$('defaultImageFile').value='';
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
  $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;
  for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
@@ -200,7 +203,7 @@ async function refreshRegistry(a){
  namedOptions('registeredProfile',registryState.profiles,'name','新しい表示画面');
  const signageTerminals=registryState.terminals.filter(x=>x.usage==='signage');
  namedOptions('signageTerminal',signageTerminals,'displayId',signageTerminals.length?null:'端末を登録してください');
- namedOptions('signageProfile',registryState.profiles,'name','便一覧');
+ namedOptions('signageProfile',registryState.profiles,'name','Default画像');
  $('signageForm').querySelector('button').disabled=!signageTerminals.length;
  $('signageTerminal').disabled=!signageTerminals.length;
  $('signageEmpty').hidden=!!signageTerminals.length;
@@ -213,7 +216,7 @@ async function signageStatus(){
  const control=await response.json();if(id!==$('signageTerminal').value||a!==$('airport').value)return;
  const applied=registryState.terminals.find(x=>x.displayId===id)?.profileName;
  const match=registryState.profiles.find(x=>x.mode===control.mode&&x.airline===control.airline&&x.logo===control.logo&&x.image===control.image);
- const identity=a+':'+id;if(signageViewedTerminal!==identity){$('signageProfile').value=control.mode==='board'?'':applied||match?.name||'';signageViewedTerminal=identity;}
+ const identity=a+':'+id;if(signageViewedTerminal!==identity){for(const key of ['start','end','date'])$('signageForm').elements[key].value=control.signage?.[key]||'';$('signageProfile').value=control.mode==='board'?'':applied||match?.name||'';signageViewedTerminal=identity;}
  $('signageCurrent').textContent=mt('現在の表示')+': '+(control.mode==='board'?mt('便一覧'):applied||match?.name||control.airline);
  $('signagePreview').hidden=false;$('signagePreview').href='/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(id)+'&preview=signage';
 }
@@ -243,7 +246,7 @@ if(manager){
  $('profileForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));await post('/api/profiles',{...data,airport:$('airport').value});$('registeredProfile').value=data.name;savedProfile={airport:$('airport').value,name:data.name};$('applySavedProfile').hidden=false;$('profileNext').textContent=mt('保存しました。次に表示する端末を選びます。');$('message').textContent=mt('表示画面を保存しました。');}catch(error){$('message').textContent=error.message;}};
  $('signagePreview').onclick=async event=>{event.preventDefault();const id=$('signageTerminal').value,profile=$('signageProfile').value,a=$('airport').value;if(!id)return;try{await post('/api/signage',{airport:a,displayId:id,profileName:profile});location.href='/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(id)+'&preview=signage';}catch(error){$('message').textContent=error.message;}};
  $('signageTerminal').onchange=()=>signageStatus().catch(error=>$('message').textContent=error.message);
- $('signageForm').onsubmit=async event=>{event.preventDefault();if(!$('signageTerminal').value){$('message').textContent=mt('端末を登録してください');return;}try{await post('/api/signage',{...Object.fromEntries(new FormData(event.target)),airport:$('airport').value});$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(error){$('message').textContent=error.message;}};
+ $('signageForm').onsubmit=async event=>{event.preventDefault();if(!$('signageTerminal').value){$('message').textContent=mt('端末を登録してください');return;}try{await post('/api/signage',{...Object.fromEntries(new FormData(event.target)),airport:$('airport').value});signageViewedTerminal='';await signageStatus();$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(error){$('message').textContent=error.message;}};
  $('airport').addEventListener('change',()=>{$('displayForm').reset();$('profileForm').reset();$('registeredTerminal').value='';$('registeredProfile').value='';});
 }
 
@@ -251,7 +254,7 @@ function boardDirection(){return displayConfig.board?.direction||settings.direct
 function boardColumns(){return BoardPolicy.selectedColumns(displayConfig.board,boardDirection());}
 function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value)};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
 function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalUsage').value!=='signage';
- const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;
+ const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;$('defaultImageSettings').hidden=board;
  for(const input of $('boardTerminalSettings').querySelectorAll('input,select'))input.disabled=!board;
  $('departureColumnSettings').hidden=$('terminalDirection').value!=='departure';$('arrivalColumnSettings').hidden=$('terminalDirection').value!=='arrival';
 }
@@ -309,18 +312,18 @@ function renderTerminalLists(){
  const language=$('managerLanguage').value;
  const key=JSON.stringify([registryState,language]);
  if(renderTerminalLists.key===key)return;renderTerminalLists.key=key;
- const current=t=>t.currentDisplay||t.profileName|| (t.usage==='board'?mt(t.direction==='arrival'?'到着':'出発')+' · '+mt('便一覧'):mt('未設定'));
+ const current=t=>t.currentDisplay||t.profileName|| (t.usage==='board'?mt(t.direction==='arrival'?'到着':'出発')+' · '+mt('便一覧'):mt('Default画像'));
  function make(target,items,signage){
   const container=$(target);container.replaceChildren();
   if(!items.length){container.append(emptyManager('登録済みの端末はありません'));return;}
   const table=document.createElement('table');table.className='terminal-list';
   const head=table.createTHead().insertRow();
   for(const label of ['端末名','端末ID','現在の表示','操作']){const th=document.createElement('th');th.textContent=mt(label);head.append(th);}
-  for(const t of items){const row=table.insertRow();for(const value of [t.name,t.displayId,current(t)])row.insertCell().textContent=value;
+  for(const t of items){const row=table.insertRow();for(const value of [t.name,t.displayId,current(t)+(t.signage?.start?' · '+(t.signage.date||mt('毎日'))+' '+t.signage.start+'–'+t.signage.end:'')])row.insertCell().textContent=value;
    const cell=row.insertCell();
    function button(label,action){const b=document.createElement('button');b.type='button';b.textContent=mt(label);b.onclick=action;cell.append(b);}
-   if(signage){const select=document.createElement('select');for(const profile of registryState.profiles){const option=document.createElement('option');option.value=profile.name;option.textContent=profile.name;select.append(option);}select.value=t.profileName||'';cell.append(select);
-    button('表示を切り替える',async()=>{try{if(!select.value)return;await post('/api/signage',{airport:$('airport').value,displayId:t.displayId,profileName:select.value});$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(e){$('message').textContent=e.message;}});
+   if(signage){cell.classList.add('signage-actions');const select=document.createElement('select');const fallbackOption=document.createElement('option');fallbackOption.value='';fallbackOption.textContent=mt('Default画像');select.append(fallbackOption);for(const profile of registryState.profiles){const option=document.createElement('option');option.value=profile.name;option.textContent=profile.name;select.append(option);}select.value=t.profileName||'';cell.append(select);const inputs={};for(const [name,label,type] of [['start','表示開始','time'],['end','表示終了','time'],['date','表示日（空欄なら毎日）','date']]){const wrapper=document.createElement('label');wrapper.textContent=mt(label);const input=document.createElement('input');input.type=type;input.value=t.signage?.[name]||'';input.setAttribute('aria-label',mt(label));inputs[name]=input;wrapper.append(input);cell.append(wrapper);}
+    button('表示を切り替える',async()=>{try{await post('/api/signage',{airport:$('airport').value,displayId:t.displayId,profileName:select.value,...Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value]))});signageViewedTerminal='';$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(e){$('message').textContent=e.message;}});
    }else{
     button('設定を変更',()=>{$('registeredTerminal').value=t.displayId;$('displayId').value=t.displayId;loadDisplayControl().then(()=>$('displayForm').scrollIntoView({behavior:'smooth'}));});
     button('削除',async()=>{if(!confirm(mt('この端末の登録を削除しますか？')+' '+t.name))return;try{await post('/api/terminals/delete',{airport:$('airport').value,displayId:t.displayId});$('registeredTerminal').value='';$('displayId').value='';$('displayForm').elements.name.value='';$('message').textContent=mt('端末の登録を削除しました。');}catch(e){$('message').textContent=e.message;}});

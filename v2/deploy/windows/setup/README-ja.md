@@ -35,3 +35,7 @@ In section 8, administrators select 24, 72, 168 or 720 hours. The default is 72 
 ③端末の設定でフライト情報表示の端末を選び、言語を追加し↑↓で順序を変更します。英語→日本語、英語→日本語→中国語（簡体・繁体）などを端末ごとに保存できます。切替間隔は3〜60秒（初期8秒）。初期順序は英語→日本語です。見出し・全便の言語を同時に切り替え、便ごとの従来言語指定は使いません。
 
 In section 3, select a flight board terminal, add languages and reorder with ↑/↓. Each terminal rotates its headings and all flights together, for example English → Japanese → Chinese (Simplified or Traditional). The interval is 3–60 seconds (default 8), with English → Japanese as the default. Previous per-flight language overrides are no longer used for display.
+
+## 時間指定とDefault画像 / Scheduled signage
+②で端末の画面・開始・終了を設定します。時間外は③のDefault画像へ戻ります。日付未指定は毎日、日付指定はその日だけ。空港現地時刻で開始を含み終了を含みません。初期画像は犬付きMKMロゴです。
+In section 2 set each terminal's layout and time window. Outside the window, section 3's default image appears. A blank date repeats daily; a date runs once. Airport local time, start inclusive/end exclusive. Initial default: MKM dog logo.

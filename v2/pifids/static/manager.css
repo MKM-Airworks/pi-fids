@@ -50,3 +50,9 @@ body[data-view=manager] .manager-sidebar{overflow-y:auto}body[data-view=manager]
 .web-sync-controls{display:flex;align-items:end;gap:14px;flex-wrap:wrap}.web-sync-controls p{flex-basis:100%;margin:0}.web-contract-note{font-size:.9rem;color:#536c80}#upstreamTimes{color:#536c80;font-size:.9rem}
 
 #terminalLanguageOrder>div{display:flex;align-items:center;gap:8px;margin-bottom:8px}#terminalLanguageOrder span{min-width:130px}#terminalLanguageOrder button{padding:6px 12px}
+
+.terminal-list td.signage-actions{white-space:normal;min-width:330px;}
+.signage-actions label{display:inline-flex;flex-direction:column;font-size:12px;margin:5px 8px 5px 0;gap:4px;}
+.signage-actions>select{display:block;width:100%;min-width:0;max-width:440px;}
+.signage-actions input{max-width:160px;}
+.signage-actions button{display:block;}

@@ -15,7 +15,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .__main__ import handler
 from .store import Store, validate, retention
 from .security import validate_source
-from . import airline_names, board_config, clock_sync, airport_names, sites
+from . import signage_config, airline_names, board_config, clock_sync, airport_names, sites
 
 
 class ReceiverStore(Store):
@@ -41,11 +41,12 @@ class ReceiverStore(Store):
         if clock is not None:clock_sync.validate(clock)
         timing = retention(control)
         board = board_config.validate(control.get('board'))
+        signage = signage_config.validate(control.get('signage'))
         mode, airline = control.get('mode'), control.get('airline')
         if mode not in ('board', 'counter', 'gate') or not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Invalid display instruction')
         refs = [control.get(key, '') for key in ('logo', 'image')]
-        for digest in refs + ([board['logo']] if board else []) + [flight['airlineLogo'] for flight in flights] + [item.get('logo','') for item in airlines.values()]:
+        for digest in [signage['defaultImage']] + refs + ([board['logo']] if board else []) + [flight['airlineLogo'] for flight in flights] + [item.get('logo','') for item in airlines.values()]:
             if not isinstance(digest, str):
                 raise ValueError('Invalid image ID')
             if digest:
@@ -65,6 +66,7 @@ class ReceiverStore(Store):
             airport_names.write(db,airport,directory)
             airline_names.write(db,airport,airlines)
             board_config.write(db,airport,display_id,board)
+            signage_config.write(db,airport,display_id,signage)
             db.execute('UPDATE state SET published=?,version=? WHERE airport=?', (json.dumps(flights,ensure_ascii=False),state['version'],airport))
             db.execute('INSERT INTO display_timing VALUES (?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET departure=excluded.departure,arrival=excluded.arrival', (airport,display_id,timing['departureHideMinutes'],timing['arrivalHideMinutes']))
             db.execute('INSERT INTO displays VALUES (?,?,?,?,?) ON CONFLICT(airport,display_id) DO UPDATE SET mode=excluded.mode,airline=excluded.airline,version=excluded.version', (airport,display_id,mode,airline,control['version']))
@@ -91,7 +93,7 @@ def sync_once(store, source, airport, display_id, token=None):
     control = state['control']
     clock_delta=clock_sync.validate(state['clock'])-time.time() if state.get('clock') else None
     images = {}
-    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [(control.get('board') or {}).get('logo','')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])] + [item.get('logo','') for item in state.get('airlineNames',{}).values()]):
+    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [(control.get('board') or {}).get('logo',''),(control.get('signage') or {}).get('defaultImage','')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])] + [item.get('logo','') for item in state.get('airlineNames',{}).values()]):
         if digest:
             try:
                 store.asset(airport, digest)

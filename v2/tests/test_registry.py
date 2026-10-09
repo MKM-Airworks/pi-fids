@@ -51,7 +51,7 @@ class RegistryTests(unittest.TestCase):
     def test_legacy_terminals_migrate_without_changing_display(self):
         self.store.set_display(dict(airport='ROR',displayId='gate-02',mode='gate',airline='Sample'))
         before=self.store.display('ROR','gate-02')
-        self.assertEqual(registry.listing(self.store,'ROR')['terminals'],[dict(displayId='gate-02',name='gate-02',profileName=None,usage='signage',direction='departure',currentDisplay='Sample')])
+        self.assertEqual(registry.listing(self.store,'ROR')['terminals'],[dict(displayId='gate-02',name='gate-02',profileName=None,usage='signage',signage=dict(defaultImage='',start='',end='',date='',enabled=False),direction='departure',currentDisplay='Sample')])
         self.assertEqual(self.store.display('ROR','gate-02'),before)
 
     def test_same_image_choices_keep_the_selected_name(self):

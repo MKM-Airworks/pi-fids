@@ -45,3 +45,6 @@ body[data-view=display][data-direction=arrival]:not(.display-setup) .flight-boar
 body[data-view=display][data-direction=arrival]:not(.display-setup) #displayFooter{background:#741923}
 body[data-view=display]:not(.display-setup) .flight-board td[data-column=estimated]{color:#ffe17d}
 body[data-view=display]:not(.display-setup) .flight-board td:not([data-column=estimated]){color:#fff}
+
+.flight-board td.airline-logo-cell{background:#fff;padding:0 .5vw!important;vertical-align:middle;}
+.flight-board td.airline-logo-cell .flight-logo{width:100%;max-width:none;height:calc(64vh / var(--page-rows,8));max-height:none;object-fit:contain;background:#fff;}

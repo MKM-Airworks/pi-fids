@@ -27,6 +27,7 @@ def handler(store, upstream=None, os_clock=None):
         def do_GET(self):
             url = urlparse(self.path)
             files = {'/static/manager.css': ('static/manager.css', 'text/css'), '/static/board-policy.js': ('static/board-policy.js', 'text/javascript'), '/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
+            files['/static/signage-policy.js'] = ('static/signage-policy.js','text/javascript')
             files['/static/airport-names.js'] = ('static/airport-names.js', 'text/javascript')
             files['/static/users-audit.js'] = ('static/users-audit.js','text/javascript')
             files['/static/login.js'] = ('static/login.js', 'text/javascript')

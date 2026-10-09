@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from . import airport_names, airline_names, sites
+from . import signage_config, airport_names, airline_names, sites
 from zoneinfo import ZoneInfo
 import base64
 import hashlib
@@ -23,7 +23,7 @@ def retention(data):
         result[key] = value
     return result
 
-from . import board_config, clock_sync
+from . import signage_config, board_config, clock_sync
 from .image_metadata import dimensions
 
 LANGUAGES = ('ja', 'en', 'zh-Hant', 'zh-Hans', 'ko')
@@ -106,6 +106,7 @@ class Store:
             db.execute('CREATE TABLE IF NOT EXISTS airline_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS airport_names (airport TEXT PRIMARY KEY,body TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS clock_state (id INTEGER PRIMARY KEY,offset REAL NOT NULL,revision INTEGER NOT NULL,last_sync TEXT,source TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS signage_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS board_settings (airport TEXT NOT NULL,display_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(airport,display_id))')
             db.execute('CREATE TABLE IF NOT EXISTS asset_kinds (airport TEXT NOT NULL,digest TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(airport,digest))')
             db.execute('CREATE TABLE IF NOT EXISTS display_timing (airport TEXT NOT NULL, display_id TEXT NOT NULL, departure INTEGER NOT NULL, arrival INTEGER NOT NULL, PRIMARY KEY(airport,display_id))')
@@ -314,10 +315,11 @@ class Store:
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)
             board = board_config.read(db,airport,display_id)
+            signage = signage_config.read(db,airport,display_id)
             clock=clock_sync.info(db)
             directory=airport_names.read(db,airport)
         return {'timezone':self.timezone(airport), 'airlineNames':self.airline_names(airport), 'airportNames':directory,'clock':clock,'airport':airport, 'flights':json.loads(published), 'version':version,
-                'control':{'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
+                'control':{'signage':signage, 'board':board, **timing, 'displayId':display_id, 'mode':display[0] if display else 'board', 'airline':display[1] if display else '', 'version':display[2] if display else 0, 'logo':refs[0] if refs else '', 'image':refs[1] if refs else ''}}
 
     def display(self, airport, display_id):
         self.read(airport)
@@ -328,7 +330,8 @@ class Store:
             refs = db.execute('SELECT logo,image FROM display_assets WHERE airport=? AND display_id=?', (airport,display_id)).fetchone()
             timing = self.timing(db, airport, display_id)
             board = board_config.read(db,airport,display_id)
-        return {'timezone':self.timezone(airport), 'board':board, **timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
+            signage = signage_config.read(db,airport,display_id)
+        return {'timezone':self.timezone(airport), 'signage':signage, 'board':board, **timing, 'logo': refs[0] if refs else '', 'image': refs[1] if refs else '', 'displayId': display_id, 'mode': row[0] if row else 'board', 'airline': row[1] if row else '', 'version': row[2] if row else 0}
 
     @staticmethod
     def timing(db, airport, display_id):

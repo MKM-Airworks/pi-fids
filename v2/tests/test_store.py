@@ -84,7 +84,7 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(store.display('SHI', 'gate-01')['mode'], 'board')
             self.assertEqual(store.display('ROR', 'gate-02')['mode'], 'board')
             store.set_display({'airport':'ROR', 'displayId':'gate-01', 'mode':'board', 'airline':'Sample Air'})
-            self.assertEqual(store.display('ROR', 'gate-01'), {'timezone':'Pacific/Palau', 'board':None, 'departureHideMinutes':10, 'arrivalHideMinutes':120, 'logo':'', 'image':'', 'displayId':'gate-01', 'mode':'board', 'airline':'', 'version':2})
+            self.assertEqual(store.display('ROR', 'gate-01'), {'timezone':'Pacific/Palau', 'signage':{'defaultImage':'','start':'','end':'','date':'','enabled':False}, 'board':None, 'departureHideMinutes':10, 'arrivalHideMinutes':120, 'logo':'', 'image':'', 'displayId':'gate-01', 'mode':'board', 'airline':'', 'version':2})
 
     def test_invalid_display_instruction_does_not_replace_current(self):
         with tempfile.TemporaryDirectory() as directory:
