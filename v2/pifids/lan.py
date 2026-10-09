@@ -132,7 +132,7 @@ def feed_handler(store, security):
                 if url.path == '/api/feed':
                     return self.send(200, feed)
                 digest = query.get('id', [''])[0]
-                references = {feed['control']['logo'], feed['control']['image'], (feed['control'].get('board') or {}).get('logo','')} | {flight.get('airlineLogo', '') for flight in feed['flights']}
+                references = {feed['control']['logo'], feed['control']['image'], (feed['control'].get('board') or {}).get('logo','')} | {flight.get('airlineLogo', '') for flight in feed['flights']} | {item.get('logo','') for item in feed.get('airlineNames',{}).values()}
                 if not digest or digest not in references:
                     return self.send(403, {'error':'Image is not part of this published display'})
                 mime, body = store.asset(airport, digest)

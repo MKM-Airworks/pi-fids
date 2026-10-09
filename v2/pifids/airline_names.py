@@ -8,12 +8,16 @@ def validate(value):
     if not isinstance(value,dict) or len(value)>200:raise ValueError('Invalid airline directory')
     result={}
     for code,names in value.items():
-        if not isinstance(code,str) or not re.fullmatch('[A-Z0-9]{2,3}',code) or not isinstance(names,dict) or set(names)-set(LANGUAGES):raise ValueError('Invalid airline code or language')
+        if not isinstance(code,str) or not re.fullmatch('[A-Z0-9]{2,3}',code) or not isinstance(names,dict) or set(names)-set((*LANGUAGES,'logo')):raise ValueError('Invalid airline code or language')
         clean={}
+        logo=names.get('logo','')
+        if not isinstance(logo,str) or (logo and not re.fullmatch('[a-f0-9]{64}',logo)):raise ValueError('Invalid airline logo')
         for language,name in names.items():
+            if language=='logo':continue
             if not isinstance(name,str) or len(name)>80 or any(ord(c)<32 for c in name):raise ValueError('Invalid airline name')
             clean[language]=name.strip()
-        if not any(clean.values()):raise ValueError('Airport name required')
+        if not any(clean.values()):raise ValueError('Airline name required')
+        if logo:clean['logo']=logo
         result[code]=clean
     return result
 def read(db,airport):

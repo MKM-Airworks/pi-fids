@@ -45,7 +45,7 @@ class ReceiverStore(Store):
         if mode not in ('board', 'counter', 'gate') or not isinstance(airline, str) or len(airline) > 100 or (mode != 'board' and not airline.strip()):
             raise ValueError('Invalid display instruction')
         refs = [control.get(key, '') for key in ('logo', 'image')]
-        for digest in refs + ([board['logo']] if board else []) + [flight['airlineLogo'] for flight in flights]:
+        for digest in refs + ([board['logo']] if board else []) + [flight['airlineLogo'] for flight in flights] + [item.get('logo','') for item in airlines.values()]:
             if not isinstance(digest, str):
                 raise ValueError('Invalid image ID')
             if digest:
@@ -91,7 +91,7 @@ def sync_once(store, source, airport, display_id, token=None):
     control = state['control']
     clock_delta=clock_sync.validate(state['clock'])-time.time() if state.get('clock') else None
     images = {}
-    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [(control.get('board') or {}).get('logo','')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])]):
+    for digest in set([control.get(key, '') for key in ('logo', 'image')] + [(control.get('board') or {}).get('logo','')] + [flight.get('airlineLogo', '') for flight in state.get('flights', [])] + [item.get('logo','') for item in state.get('airlineNames',{}).values()]):
         if digest:
             try:
                 store.asset(airport, digest)

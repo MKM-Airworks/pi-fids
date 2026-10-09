@@ -238,6 +238,7 @@ class Store:
         self.timezone(airport)
         code=data.get('code','').strip().upper()
         entry=airline_names.validate({code:data.get('names')})
+        if entry[code].get('logo'):self.asset(airport,entry[code]['logo'])
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             current=airline_names.read(db,airport)
