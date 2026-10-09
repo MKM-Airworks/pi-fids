@@ -46,3 +46,5 @@ body[data-view=manager] .manager-main{margin-left:254px;max-width:none;padding:3
 [hidden]{display:none!important}
 
 body[data-view=manager] .manager-sidebar{overflow-y:auto}body[data-view=manager] .manager-sidebar>.sidebar-brand,body[data-view=manager] .manager-sidebar>.manager-nav,body[data-view=manager] .manager-sidebar>.manager-tools{flex-shrink:0}
+
+.web-sync-controls{display:flex;align-items:end;gap:14px;flex-wrap:wrap}.web-sync-controls p{flex-basis:100%;margin:0}.web-contract-note{font-size:.9rem;color:#536c80}#upstreamTimes{color:#536c80;font-size:.9rem}

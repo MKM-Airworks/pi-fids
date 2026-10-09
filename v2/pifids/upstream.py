@@ -168,9 +168,10 @@ class Upstream:
     def __init__(self, store, config_path):
         self.store = store
         self.path = Path(config_path)
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.connection()
         with store.connect() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS upstream_sync (airport TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'manual',last_publish TEXT,published_date TEXT,published_version INTEGER,last_run TEXT,result TEXT)")
             db.execute('CREATE TABLE IF NOT EXISTS upstream_cache (airport TEXT PRIMARY KEY,manifest TEXT NOT NULL,body BLOB NOT NULL,checked_at TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS upstream_imports (airport TEXT PRIMARY KEY,flight_ids TEXT NOT NULL,service_date TEXT NOT NULL,web_version INTEGER NOT NULL,baseline TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS upstream_attempts (airport TEXT PRIMARY KEY,attempted_at TEXT NOT NULL,result TEXT NOT NULL)')
@@ -253,7 +254,9 @@ class Upstream:
         with self.store.connect() as db:
             attempt = db.execute('SELECT attempted_at,result FROM upstream_attempts WHERE airport=?',(airport,)).fetchone()
             imported = db.execute('SELECT service_date,web_version FROM upstream_imports WHERE airport=?',(airport,)).fetchone()
-        result = {'configured':True,'serviceDate':service_date,'lastAttempt':attempt[0] if attempt else None,'lastResult':attempt[1] if attempt else None,'lastImportDate':imported[0] if imported else None,'lastImportVersion':imported[1] if imported else None,'flights':[],'canImport':False}
+        sync=self.sync_info(airport)
+        connection_status='unknown' if not attempt else 'offline' if attempt[1]=='unavailable' else 'error' if attempt[1] in ('unauthorized','failed') else 'online'
+        result = {**sync,'connectionStatus':connection_status,'configured':True,'serviceDate':service_date,'lastAttempt':attempt[0] if attempt else None,'lastResult':attempt[1] if attempt else None,'lastImportDate':imported[0] if imported else None,'lastImportVersion':imported[1] if imported else None,'flights':[],'canImport':False}
         if not cache:
             return result
         manifest = parse_json(cache[0].encode())
@@ -269,7 +272,7 @@ class Upstream:
         result.update({'flights':rows,'status':'no_flights' if body['declaration']=='no_flights' else 'available' if rows else 'no_operating_flights' if active else 'no_active_schedules','canImport':bool(rows) or body['declaration']=='no_flights' or active})
         return result
 
-    def import_draft(self, airport, service_date, revision, web_version):
+    def import_draft(self, airport, service_date, revision, web_version, auto_publish=False):
         with self.lock:
             info = self.info(airport,service_date)
             if not info['canImport']:
@@ -280,7 +283,9 @@ class Upstream:
                 raise ValueError('Invalid draft revision')
             with self.store.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
-                draft, current = db.execute('SELECT draft,draft_revision FROM state WHERE airport=?',(airport,)).fetchone()
+                draft, current, published = db.execute('SELECT draft,draft_revision,published FROM state WHERE airport=?',(airport,)).fetchone()
+                if auto_publish and json.loads(draft)!=json.loads(published):
+                    raise DraftConflict('Unpublished manual changes require review before automatic publication.')
                 if current != revision:
                     raise DraftConflict('Draft changed. Review it again before importing.')
                 rows = json.loads(draft)
@@ -309,5 +314,59 @@ class Upstream:
                     if previous != replacement:
                         self.store.audit(db,airport,'flight.web-import',(replacement or previous)['flightNumber'],previous,replacement,source='MKM Flight Web')
                 self.store.audit(db,airport,'web.import','version '+str(web_version),None,dict(webVersion=web_version,serviceDate=service_date,flights=len(imported)),source='MKM Flight Web')
+                if auto_publish:
+                    final=json.dumps(manual+imported)
+                    db.execute('UPDATE state SET published=?,version=version+1 WHERE airport=?',(final,airport))
+                    self.store.audit(db,airport,'web.auto-publish','version '+str(web_version),json.loads(published),manual+imported,source='MKM Flight Web')
+                    db.execute('UPDATE upstream_sync SET last_publish=?,published_date=?,published_version=? WHERE airport=?',(datetime.now(timezone.utc).isoformat(),service_date,web_version,airport))
                 db.execute('INSERT INTO upstream_imports VALUES (?,?,?,?,?) ON CONFLICT(airport) DO UPDATE SET flight_ids=excluded.flight_ids,service_date=excluded.service_date,web_version=excluded.web_version,baseline=excluded.baseline',(airport,json.dumps([row['id'] for row in imported]),service_date,web_version,json.dumps(info['flights'])))
         return info
+
+    def sync_info(self, airport):
+        with self.store.connect() as db:
+            row=db.execute('SELECT mode,last_publish,last_run,result FROM upstream_sync WHERE airport=?',(airport,)).fetchone()
+        return {'mode':row[0] if row else 'manual','lastPublish':row[1] if row else None,'lastAutoCheck':row[2] if row else None,'autoResult':row[3] if row else None,'pollSeconds':60}
+
+    def set_mode(self, airport, mode):
+        self.require_airport(airport)
+        if mode not in ('manual','auto'):raise ValueError('Invalid synchronization mode')
+        with self.lock, self.store.connect() as db:
+            previous=self.sync_info(airport)['mode']
+            db.execute("INSERT INTO upstream_sync (airport,mode) VALUES (?,?) ON CONFLICT(airport) DO UPDATE SET mode=excluded.mode",(airport,mode))
+            self.store.audit(db,airport,'web.mode','MKM Flight Web',{'mode':previous},{'mode':mode},source='MKM Flight Web')
+        return self.sync_info(airport)
+
+    def auto_step(self):
+        airport=self.connection()[1]['stationAirport']
+        with self.lock:
+            if self.sync_info(airport)['mode']!='auto':return
+            result='failed'
+            try:
+                self.fetch(airport)
+                info=self.info(airport)
+                if not info['canImport']:
+                    result='not_applicable'
+                else:
+                    with self.store.connect() as db:
+                        applied=db.execute('SELECT published_date,published_version FROM upstream_sync WHERE airport=?',(airport,)).fetchone()
+                    if applied==(info['serviceDate'],info['webVersion']):result='unchanged'
+                    else:
+                        with self.store.as_actor({'username':'MKM Flight Web / auto sync','role':'system'}):
+                            self.import_draft(airport,info['serviceDate'],self.store.read(airport)['draftRevision'],info['webVersion'],auto_publish=True)
+                        result='published'
+            except DraftConflict:result='review_required'
+            except (ValueError,TypeError,KeyError,OSError):result='failed'
+            with self.store.connect() as db:
+                db.execute('UPDATE upstream_sync SET last_run=?,result=? WHERE airport=?',(datetime.now(timezone.utc).isoformat(),result,airport))
+
+    def start(self):
+        stop=threading.Event()
+        def run():
+            while not stop.is_set():
+                try:self.auto_step()
+                except Exception:
+                    # Keep the polling worker alive; preserve the last published data.
+                    pass
+                stop.wait(60)
+        threading.Thread(target=run,name='MKM Flight Web sync',daemon=True).start()
+        return stop

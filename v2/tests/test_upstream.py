@@ -110,4 +110,56 @@ class UpstreamTests(unittest.TestCase):
             self.config_path.write_text(json.dumps(config))
             with self.assertRaises(ValueError):Upstream(self.store,self.config_path)
 
+
+    def test_auto_publication_idempotence_offline_and_manual_changes(self):
+        self.stage()
+        self.upstream.set_mode('SHI','auto')
+        with patch.object(self.upstream,'fetch'),patch('pifids.upstream.local_date',return_value=__import__('datetime').date(2026,10,5)):
+            self.upstream.auto_step()
+            current=self.store.read('SHI')
+            self.assertEqual(current['draft'],current['flights'])
+            self.assertEqual(len(current['flights']),2)
+            version=current['version']
+            self.assertEqual(self.upstream.sync_info('SHI')['autoResult'],'published')
+            self.upstream.auto_step()
+            self.assertEqual(self.store.read('SHI')['version'],version)
+            self.assertEqual(self.upstream.sync_info('SHI')['autoResult'],'unchanged')
+            # New date projection cannot expose an operator's unpublished edits.
+            self.store.change_flight({**current['draft'][0],'gate':'8','expectedDraftRevision':current['draftRevision']})
+        before=self.store.read('SHI')
+        with patch.object(self.upstream,'fetch'),patch('pifids.upstream.local_date',return_value=__import__('datetime').date(2026,10,6)):
+            self.upstream.auto_step()
+        self.assertEqual(self.store.read('SHI'),before)
+        self.assertEqual(self.upstream.sync_info('SHI')['autoResult'],'review_required')
+        with patch.object(self.upstream,'fetch',side_effect=ValueError('Web unavailable')):
+            self.upstream.auto_step()
+        self.assertEqual(self.store.read('SHI'),before)
+        self.upstream.set_mode('SHI','manual')
+        with patch.object(self.upstream,'fetch') as fetch:
+            self.upstream.auto_step();fetch.assert_not_called()
+        records=self.store.audit_records('SHI')
+        auto=[r for r in records if r['action']=='web.auto-publish']
+        self.assertEqual(len(auto),1)
+        self.assertEqual(auto[0]['source'],'MKM Flight Web')
+        self.assertEqual(auto[0]['role'],'system')
+        self.assertEqual(Upstream(self.store,self.config_path).sync_info('SHI')['mode'],'manual')
+
+    def test_auto_conflict_is_atomic_and_no_flights_publication(self):
+        self.stage();self.upstream.set_mode('SHI','auto')
+        self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','time':'10:30'})
+        self.store.publish('SHI');before=self.store.read('SHI')
+        with patch.object(self.upstream,'fetch'),patch('pifids.upstream.local_date',return_value=__import__('datetime').date(2026,10,5)):
+            self.upstream.auto_step()
+        self.assertEqual(self.store.read('SHI'),before)
+        self.assertEqual(self.upstream.sync_info('SHI')['autoResult'],'failed')
+        # Explicit no-flights releases may clear imported flights, never a failed response.
+        body=json.loads(self.raw);body['flights']=[];body['declaration']='no_flights'
+        raw=json.dumps(body).encode();manifest={**self.manifest,'sha256':hashlib.sha256(raw).hexdigest(),'byteLength':len(raw),'activeScheduleCount':0,'status':'no_flights'}
+        empty=Store(self.path/'empty.sqlite');upstream=Upstream(empty,self.config_path)
+        with empty.connect() as db:db.execute('INSERT INTO upstream_cache VALUES (?,?,?,?)',('SHI',json.dumps(manifest),raw,'2026-10-05T00:00:00+00:00'))
+        upstream.set_mode('SHI','auto')
+        with patch.object(upstream,'fetch'),patch('pifids.upstream.local_date',return_value=__import__('datetime').date(2026,10,5)):upstream.auto_step()
+        self.assertEqual(upstream.sync_info('SHI')['autoResult'],'published')
+        self.assertEqual(empty.read('SHI')['flights'],[])
+
 if __name__=='__main__':unittest.main()

@@ -248,6 +248,10 @@ class Store:
             draft,published=db.execute('SELECT draft,published FROM state WHERE airport=?',(airport,)).fetchone()
             db.execute('UPDATE state SET published=draft,version=version+1 WHERE airport=?', (airport,))
             self.audit(db,airport,'flight.publish','published flights',json.loads(published),json.loads(draft))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='upstream_sync'").fetchone():
+                imported=db.execute('SELECT service_date,web_version FROM upstream_imports WHERE airport=?',(airport,)).fetchone()
+                if imported:
+                    db.execute("INSERT INTO upstream_sync (airport,last_publish,published_date,published_version) VALUES (?,?,?,?) ON CONFLICT(airport) DO UPDATE SET last_publish=excluded.last_publish,published_date=excluded.published_date,published_version=excluded.published_version",(airport,datetime.now(timezone.utc).isoformat(),*imported))
 
     def feed(self, airport, display_id):
         self.timezone(airport)

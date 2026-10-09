@@ -108,6 +108,9 @@ def handler(store, upstream=None, os_clock=None):
                     store.save_airport_name(data)
                 elif self.path == '/api/flights':
                     store.add(data)
+                elif self.path == '/api/upstream/mode':
+                    if upstream is None:raise ValueError('Web connection is not configured')
+                    upstream.set_mode(data.get('airport'),data.get('mode'))
                 elif self.path in ('/api/upstream/check','/api/upstream/import'):
                     if upstream is None:
                         raise ValueError('Web connection is not configured')
@@ -135,7 +138,7 @@ def handler(store, upstream=None, os_clock=None):
                     store.set_display(data)
                 else:
                     return self.send(404, {'error': 'Not found'})
-                if self.path not in ('/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/import','/api/upstream/check'):
+                if self.path not in ('/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/import','/api/upstream/check','/api/upstream/mode'):
                     safe={key:value for key,value in data.items() if key not in ('body','token','password','credential')}
                     store.record_audit(data.get('airport'),self.path.removeprefix('/api/').replace('/','.'),data.get('displayId',data.get('code',data.get('name',''))),None,safe)
                 self.send(200, {'ok': True})
@@ -205,4 +208,5 @@ if __name__ == '__main__':
         threading.Thread(target=lan_server.serve_forever, daemon=True).start()
         print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)
+    if upstream:upstream.start()
     server.serve_forever()

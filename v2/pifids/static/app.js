@@ -152,6 +152,7 @@ async function refreshUpstream(a){
  const serviceDate=$('upstreamDate').value;
  const response=await fetch('/api/upstream?airport='+encodeURIComponent(a)+(serviceDate?'&serviceDate='+encodeURIComponent(serviceDate):''));
  const result=await response.json();if(!response.ok){upstreamState=null;$('upstreamCheck').disabled=true;$('upstreamImport').disabled=true;$('upstreamStatus').textContent=result.error;$('upstreamPreview').replaceChildren();return;}
+ renderWebSync(result);
  upstreamState=result;$('upstreamCheck').disabled=!result.configured||upstreamBusy;$('upstreamImport').disabled=!result.canImport||upstreamBusy;
  if(!result.configured){$('upstreamStatus').textContent=mt('Web接続は未設定です。');$('upstreamPreview').replaceChildren();return;}
  if(!serviceDate)$('upstreamDate').value=result.serviceDate;
@@ -327,3 +328,20 @@ function renderTerminalLists(){
  make('signageTerminalList',registryState.terminals.filter(t=>t.usage==='signage'),true);
  make('settingsTerminalList',registryState.terminals,false);
 }
+
+function renderWebSync(result){
+ const en=(localStorage.getItem('pifids:manager-language')||document.documentElement.lang)==='en';
+ const t=(ja,english)=>en?english:ja;
+ const mode=$('upstreamMode'),button=$('saveUpstreamMode');
+ if(!mode.dataset.dirty)mode.value=result.mode||'manual';
+ mode.disabled=button.disabled=!result.configured||managerSession?.user?.role!=='admin';
+ const labels={online:t('オンライン','Online'),offline:t('オフライン — 最後の公開情報を継続表示','Offline — retaining last published data'),unknown:t('未確認','Not checked'),error:t('接続エラー（認証・データを確認）','Connection error (check credentials or data)')};
+ $('upstreamConnection').textContent=t('接続状態：','Connection: ')+(result.configured?labels[result.connectionStatus||'unknown']:t('未設定','Not configured'));
+ const format=value=>value?new Date(value).toLocaleString(en?'en-GB':'ja-JP',{timeZone:state?.timezone||'Asia/Tokyo'}):'—';
+ $('upstreamTimes').textContent=t('最終受信：','Last received: ')+format(result.lastSuccess)+' · '+t('最終Web公開：','Last Web publication: ')+format(result.lastPublish)+' · '+t('接続確認：','Connection checked: ')+format(result.lastAttempt);
+ const states={review_required:t('未公開の変更があります。下書きを確認・公開してから自動同期を再開します。','Unpublished changes require review and publication before automatic sync can resume.'),not_applicable:t('当日適用できるWeb情報がありません。最後の公開情報を保持しています。','No applicable Web data for today. Keeping last published data.'),failed:t('自動同期に失敗しました。最後の公開情報を保持し、次回再試行します。','Automatic sync failed. Keeping last published data and retrying next time.')};
+ if(states[result.autoResult])$('upstreamConnection').textContent+=' · '+states[result.autoResult];
+}
+if(manager)$('saveUpstreamMode').onclick=async()=>{try{const mode=$('upstreamMode').value;if(mode==='auto'&&!confirm(mt('自動受信・公開を開始します。新しいWeb配信は確認なしで表示へ反映されます。よろしいですか？')))return;await post('/api/upstream/mode',{airport:$('airport').value,mode});delete $('upstreamMode').dataset.dirty;await refreshUpstream($('airport').value);}catch(error){$('message').textContent=error.message;}};
+
+if(manager)$('upstreamMode').onchange=()=>{$('upstreamMode').dataset.dirty='true';};
