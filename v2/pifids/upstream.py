@@ -164,17 +164,21 @@ def project(body, service_date):
     return sorted(rows,key=lambda flight:(flight['time'],flight['flightNumber']))
 
 
+def init_tables(store):
+    with store.connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS upstream_sync (airport TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'manual',last_publish TEXT,published_date TEXT,published_version INTEGER,last_run TEXT,result TEXT)")
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_cache (airport TEXT PRIMARY KEY,manifest TEXT NOT NULL,body BLOB NOT NULL,checked_at TEXT NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_imports (airport TEXT PRIMARY KEY,flight_ids TEXT NOT NULL,service_date TEXT NOT NULL,web_version INTEGER NOT NULL,baseline TEXT NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_attempts (airport TEXT PRIMARY KEY,attempted_at TEXT NOT NULL,result TEXT NOT NULL)')
+
+
 class Upstream:
     def __init__(self, store, config_path):
         self.store = store
         self.path = Path(config_path)
         self.lock = threading.RLock()
         self.connection()
-        with store.connect() as db:
-            db.execute("CREATE TABLE IF NOT EXISTS upstream_sync (airport TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'manual',last_publish TEXT,published_date TEXT,published_version INTEGER,last_run TEXT,result TEXT)")
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_cache (airport TEXT PRIMARY KEY,manifest TEXT NOT NULL,body BLOB NOT NULL,checked_at TEXT NOT NULL)')
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_imports (airport TEXT PRIMARY KEY,flight_ids TEXT NOT NULL,service_date TEXT NOT NULL,web_version INTEGER NOT NULL,baseline TEXT NOT NULL)')
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_attempts (airport TEXT PRIMARY KEY,attempted_at TEXT NOT NULL,result TEXT NOT NULL)')
+        init_tables(store)
 
     def connection(self):
         config = json.loads(self.path.read_text(encoding='utf-8'))

@@ -223,16 +223,16 @@ async function signageStatus(){
 let signageViewedTerminal='',savedProfile=null;
 function managerPage(){
  if(!manager)return;const hash=location.hash||'#flightsPanel';
- let page=['#signagePanel','#screensPanel','#assetsPanel','#airportCodesPanel','#usersPanel','#clockPanel','#auditPanel'].includes(hash)?hash:'#flightsPanel';
+ let page=['#signagePanel','#screensPanel','#assetsPanel','#airportCodesPanel','#usersPanel','#clockPanel','#auditPanel','#backupPanel'].includes(hash)?hash:'#flightsPanel';
  const allowed=managerSession?.user?.role==='admin';
  if(!allowed&&!['#flightsPanel','#signagePanel'].includes(page))page='#flightsPanel';
  for(const link of document.querySelectorAll('.manager-nav a'))link.hidden=!allowed&&!['#flightsPanel','#signagePanel'].includes(link.hash);
  $('flightPage').hidden=page!=='#flightsPanel';
- for(const id of ['signagePanel','screensPanel','assetsPanel','airportCodesPanel','usersPanel','clockPanel','auditPanel'])$(id).hidden=page!=='#'+id;
+ for(const id of ['signagePanel','screensPanel','assetsPanel','airportCodesPanel','usersPanel','clockPanel','auditPanel','backupPanel'])$(id).hidden=page!=='#'+id;
  for(const link of document.querySelectorAll('.manager-nav a')){if(link.hash===page)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
- const titles={'#flightsPanel':'フライト情報管理','#signagePanel':'チェックイン・ゲート表示管理','#screensPanel':'端末の設定','#assetsPanel':'ロゴ・画像登録','#airportCodesPanel':'航空会社・空港コード入力・更新','#clockPanel':'時刻同期・修正','#usersPanel':'ユーザー管理','#auditPanel':'監査ログ'};
+ const titles={'#backupPanel':'バックアップ・復元','#flightsPanel':'フライト情報管理','#signagePanel':'チェックイン・ゲート表示管理','#screensPanel':'端末の設定','#assetsPanel':'ロゴ・画像登録','#airportCodesPanel':'航空会社・空港コード入力・更新','#clockPanel':'時刻同期・修正','#usersPanel':'ユーザー管理','#auditPanel':'監査ログ'};
  document.querySelector('.manager-intro h1').textContent=mt(titles[page]);
- const descriptions={'#flightsPanel':'便を編集して公開し、空港内の表示を管理します。','#signagePanel':'登録済みの端末と表示画面を選択して切り替えます。','#screensPanel':'航空会社・クラスなど、運用で分かる名称を登録します。','#assetsPanel':'ロゴと案内画面を用途別に登録します。','#airportCodesPanel':'空港コードと表示言語ごとの空港名を登録します。','#clockPanel':'表示端末の時計は管理端末とLANで同期します。','#usersPanel':'ユーザーの登録・権限・利用状態を管理します。','#auditPanel':'誰が何を更新したか確認します。'};
+ const descriptions={'#backupPanel':'保存したデータを検証し、別フォルダーへ復元を準備します。','#flightsPanel':'便を編集して公開し、空港内の表示を管理します。','#signagePanel':'登録済みの端末と表示画面を選択して切り替えます。','#screensPanel':'航空会社・クラスなど、運用で分かる名称を登録します。','#assetsPanel':'ロゴと案内画面を用途別に登録します。','#airportCodesPanel':'空港コードと表示言語ごとの空港名を登録します。','#clockPanel':'表示端末の時計は管理端末とLANで同期します。','#usersPanel':'ユーザーの登録・権限・利用状態を管理します。','#auditPanel':'誰が何を更新したか確認します。'};
  document.querySelector('.manager-intro > div > p:last-child').textContent=mt(descriptions[page]);
 }
 if(manager){

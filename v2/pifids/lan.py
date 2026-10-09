@@ -6,6 +6,12 @@ from .__main__ import ROOT, handler
 
 
 def manager_handler(store, security, upstream=None, os_clock=None):
+    from .backup import Backups, MAX_BYTES, inspect_archive, private
+    import sqlite3
+    import zipfile
+    import uuid
+    import re
+    backups=Backups(store,security,upstream)
     class ManagerHandler(handler(store, upstream, os_clock)):
         def do_GET(self):
             path = urlparse(self.path).path
@@ -24,8 +30,14 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.end_headers()
                 return
             identity=security.identity(self.headers)
-            if path in ('/api/users','/api/audit','/api/audit-settings','/api/clock') and identity['role']!='admin':
+            if path in ('/api/users','/api/audit','/api/audit-settings','/api/clock','/api/backups','/api/backups/download','/backup-guide') and identity['role']!='admin':
                 return self.send(403,{'error':'Administrator access required'})
+            if path in ('/api/backups','/api/backups/download'):
+                try:
+                    if path=='/api/backups':return self.send(200,backups.status())
+                    identifier=parse_qs(urlparse(self.path).query).get('id',[''])[0]
+                    return self.send(200,backups.path(identifier).read_bytes(),'application/zip')
+                except (ValueError,OSError):return self.send(400,{'error':'Backup not found'})
             if path=='/api/users':
                 return self.send(200,security.listing())
             if path=='/api/audit':
@@ -43,6 +55,32 @@ def manager_handler(store, security, upstream=None, os_clock=None):
             return super().do_GET()
 
         def do_POST(self):
+            if self.path=='/api/backups/upload':
+                origin=self.headers.get('Origin')
+                if origin and origin!='http://'+self.headers.get('Host',''):return self.send(403,{'error':'Invalid origin'})
+                identity=security.identity(self.headers)
+                if not identity:return self.send(401,{'error':'Please sign in'})
+                if identity['role']!='admin':return self.send(403,{'error':'Administrator access required'})
+                if self.headers.get('Content-Type')!='application/zip':return self.send(415,{'error':'ZIP required'})
+                path=None
+                try:
+                    size=int(self.headers.get('Content-Length','0'))
+                    if not 0<size<=MAX_BYTES:raise ValueError('Backup is too large or empty')
+                    identifier=uuid.uuid4().hex
+                    path=backups.root/(identifier+'.upload')
+                    private(path,b'')
+                    remaining=size
+                    with path.open('wb') as file:
+                        while remaining:
+                            block=self.rfile.read(min(1024*1024,remaining))
+                            if not block:raise ValueError('Incomplete upload')
+                            file.write(block);remaining-=len(block)
+                    result=inspect_archive(path,security.config()['airport'])
+                    with store.as_actor(identity):store.record_audit(security.config()['airport'],'backup.inspect',identifier,None,{'createdAt':result['createdAt']})
+                    return self.send(200,{'id':identifier,**result})
+                except (ValueError,OSError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,AttributeError):
+                    if path:path.unlink(missing_ok=True)
+                    return self.send(400,{'error':'Backup validation failed. Check the file, airport and software version.'})
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 return self.send(415, {'error':'JSON required'})
             origin = self.headers.get('Origin')
@@ -98,6 +136,21 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                     return self.send(403, {'error':'Airport access denied'})
                 data=json.loads(body)
                 with store.as_actor(identity):
+                    if self.path in ('/api/backups/create','/api/backups/prepare'):
+                        try:
+                            if self.path.endswith('/create'):
+                                result=backups.create()
+                                store.record_audit(security.config()['airport'],'backup.create',result['id'],None,{'createdAt':result['createdAt']})
+                            else:
+                                identifier=data.get('id')
+                                if not isinstance(identifier,str) or not re.fullmatch('[a-f0-9]{32}',identifier):raise ValueError('Invalid backup ID')
+                                source=backups.root/(identifier+'.upload')
+                                target=backups.root/('recovery-'+identifier)
+                                result=inspect_archive(source,security.config()['airport'],target)
+                                result['folder']=str(target)
+                                store.record_audit(security.config()['airport'],'backup.prepare',identifier,None,{'createdAt':result['createdAt']})
+                            return self.send(200,result)
+                        except (ValueError,OSError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,AttributeError):return self.send(400,{'error':'Backup or recovery preparation failed. Live data was not replaced.'})
                     if self.path=='/api/users':
                         before,after=security.change_user(data)
                         store.record_audit(security.config()['airport'],'user.'+data['action'],data['username'],before,after)
