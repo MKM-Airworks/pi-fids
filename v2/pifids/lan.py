@@ -6,7 +6,10 @@ from urllib.parse import parse_qs, urlparse
 from .__main__ import ROOT, handler
 
 
-def manager_handler(store, security, upstream=None, os_clock=None):
+def manager_handler(store, security, upstream=None, os_clock=None, terminal_security=None, terminal_source=""):
+    terminal_security = terminal_security or security
+    if terminal_security.config()["airport"] != security.config()["airport"]:
+        raise ValueError("Manager and terminal credentials airport must match")
     from .backup import Backups, MAX_BYTES, inspect_archive, private
     import sqlite3
     import zipfile
@@ -31,7 +34,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.end_headers()
                 return
             identity=security.identity(self.headers)
-            if path in ('/api/assets/catalog','/api/users','/api/audit','/api/audit-settings','/api/clock','/api/backups','/api/backups/download','/backup-guide') and identity['role']!='admin':
+            if path in ('/api/terminal-connections','/api/assets/catalog','/api/users','/api/audit','/api/audit-settings','/api/clock','/api/backups','/api/backups/download','/backup-guide') and identity['role']!='admin':
                 return self.send(403,{'error':'Administrator access required'})
             if path in ('/api/backups','/api/backups/download'):
                 try:
@@ -43,6 +46,8 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                         logging.exception('Backup listing failed')
                         return self.send(500,{'error':'Unable to load backup list. Saved backups have not been deleted.'})
                     return self.send(400,{'error':'Backup not found'})
+            if path=='/api/terminal-connections':
+                return self.send(200, {'source':terminal_source,'issued':list(terminal_security.config()['terminals'])})
             if path=='/api/users':
                 return self.send(200,security.listing())
             if path=='/api/audit':
@@ -156,6 +161,14 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                                 store.record_audit(security.config()['airport'],'backup.prepare',identifier,None,{'createdAt':result['createdAt']})
                             return self.send(200,result)
                         except (ValueError,OSError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,AttributeError):return self.send(400,{'error':'Backup or recovery preparation failed. Live data was not replaced.'})
+                    if self.path=='/api/terminal-connections/issue':
+                        from .registry import listing
+                        display_id=data.get('displayId')
+                        if display_id not in {item['displayId'] for item in listing(store,data['airport'])['terminals']}:
+                            raise ValueError('Save the terminal registration first')
+                        connection,replaced=terminal_security.issue_connection(display_id,data.get('source'),data.get('replace',False))
+                        store.record_audit(data['airport'],'terminal.connection.reissue' if replaced else 'terminal.connection.issue',display_id,None,{'source':connection['source']})
+                        return self.send(200,connection)
                     if self.path=='/api/users':
                         before,after=security.change_user(data)
                         store.record_audit(security.config()['airport'],'user.'+data['action'],data['username'],before,after)

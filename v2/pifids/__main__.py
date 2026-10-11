@@ -32,6 +32,7 @@ def handler(store, upstream=None, os_clock=None):
             files['/backup-guide'] = ('templates/backup-guide.html','text/html')
             files['/static/manager-feedback.js'] = ('static/manager-feedback.js','text/javascript')
             files['/static/asset-browser.js'] = ('static/asset-browser.js','text/javascript')
+            files['/static/terminal-connections.js'] = ('static/terminal-connections.js','text/javascript')
             files['/static/backups.js'] = ('static/backups.js','text/javascript')
             files['/static/users-audit.js'] = ('static/users-audit.js','text/javascript')
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
@@ -182,11 +183,15 @@ if __name__ == '__main__':
     parser.add_argument('--site-config', help='Installation airport and IANA timezone JSON')
     parser.add_argument('--feed-config', help='Read-only LAN credentials without changing localhost management login')
     parser.add_argument('--auth-config', help='Local manager login and terminal credentials file')
+    parser.add_argument('--terminal-auth-config', help='Separate LAN terminal credential file for management issuance')
+    parser.add_argument('--terminal-source', default='', help='LAN feed origin prefilled for terminal connections')
     parser.add_argument('--upstream-config', help='Private MKM Flight Web connection JSON')
     parser.add_argument('--clock-service', help='Private loopback Windows OS clock helper connection JSON')
     parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
     parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
+    if args.terminal_auth_config and not args.auth_config:
+        parser.error('Terminal issuance configuration requires manager authentication')
     if args.auth_config and args.feed_config:
         parser.error('Choose either --auth-config or --feed-config')
     if args.clock_service and not args.auth_config:
@@ -221,7 +226,8 @@ if __name__ == '__main__':
         store.installed_airport=auth_site['airport']
         if upstream and upstream.connection()[1]['stationAirport'] != security.config()['airport']:
             parser.error('Manager and Web connection airport must match')
-        management = manager_handler(store, security,upstream,os_clock)
+        terminal_security=Security(args.terminal_auth_config) if args.terminal_auth_config else security
+        management = manager_handler(store, security,upstream,os_clock,terminal_security,args.terminal_source)
     if args.feed_config:
         from .security import Security
         from .lan import feed_handler
@@ -230,7 +236,7 @@ if __name__ == '__main__':
     ThreadingHTTPServer.request_queue_size=64
     server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
     if args.lan_port:
-        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, security))
+        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, terminal_security if args.auth_config else security))
         threading.Thread(target=lan_server.serve_forever, daemon=True).start()
         print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)

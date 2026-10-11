@@ -13,9 +13,9 @@ class UsersAuditTests(LanTests):
         admin=self.cookie()
         with self.request(self.manager,'/api/users',{'airport':'ROR','action':'create','username':'op','password':'synthetic-operator-password','role':'operator'},admin):pass
         operator=self.cookie('op','synthetic-operator-password')
-        for endpoint in ('/api/assets/catalog?airport=ROR','/api/users','/api/audit?airport=ROR','/api/audit-settings?airport=ROR','/api/clock?airport=ROR'):
+        for endpoint in ('/api/terminal-connections','/api/assets/catalog?airport=ROR','/api/users','/api/audit?airport=ROR','/api/audit-settings?airport=ROR','/api/clock?airport=ROR'):
             self.denied(403,self.manager,endpoint,headers=operator)
-        for endpoint in ('/api/assets/delete','/api/terminals','/api/terminals/delete','/api/profiles','/api/assets','/api/airport-names','/api/clock','/api/display','/api/users','/api/upstream/mode','/api/audit-settings'):
+        for endpoint in ('/api/terminal-connections/issue','/api/assets/delete','/api/terminals','/api/terminals/delete','/api/profiles','/api/assets','/api/airport-names','/api/clock','/api/display','/api/users','/api/upstream/mode','/api/audit-settings'):
             self.denied(403,self.manager,endpoint,{'airport':'ROR'},operator)
         from pifids import registry
         registry.save_terminal(self.store,{'airport':'ROR','displayId':'counter-02','name':'Synthetic counter','usage':'signage'})

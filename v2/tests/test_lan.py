@@ -147,10 +147,6 @@ class LanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'redirects'):
             sync_once(ReceiverStore(self.path/'redirect.sqlite'),source,'ROR','gate-01',self.token)
 
-
-if __name__ == '__main__':
-    unittest.main()
-
     def test_asset_catalog_and_delete_api(self):
         self.denied(401,self.manager,'/api/assets/catalog?airport=ROR')
         self.denied(404,self.source,'/api/assets/catalog?airport=ROR',headers=self.credentials())
@@ -164,7 +160,57 @@ if __name__ == '__main__':
         with self.request(self.manager,'/api/assets/delete',{'airport':'ROR','digest':digest},headers) as response:
             self.assertTrue(json.load(response)['ok'])
         self.assertEqual(self.store.assets('ROR'),[])
-        for script in ('manager-feedback.js','asset-browser.js'):
+        for script in ('manager-feedback.js','asset-browser.js','terminal-connections.js'):
             with self.request(self.manager,'/static/'+script,headers=headers) as response:
                 self.assertEqual(response.status,200)
                 self.assertIn('javascript',response.headers['Content-Type'])
+
+    def test_manager_issues_registered_terminal_connection_and_rotates_key(self):
+        from pifids.registry import save_terminal
+        save_terminal(self.store,{'airport':'ROR','displayId':'gate-01','name':'Gate 01','usage':'signage'})
+        with self.request(self.manager,'/api/login',{'username':'test','password':'synthetic-test-password'}) as response:
+            headers={'Cookie':response.headers['Set-Cookie']}
+        self.denied(401,self.manager,'/api/terminal-connections')
+        self.denied(404,self.source,'/api/terminal-connections',headers=self.credentials())
+        with self.request(self.manager,'/api/terminal-connections',headers=headers) as response:
+            status=json.load(response)
+        self.assertEqual(status['issued'],['gate-01'])
+        self.assertNotIn(self.token,json.dumps(status))
+        route='/api/terminal-connections/issue'
+        data={'airport':'ROR','displayId':'gate-01','source':self.source}
+        self.denied(400,self.manager,route,data,headers)
+        self.denied(403,self.manager,route,{**data,'airport':'SHI'},headers)
+        self.denied(400,self.manager,route,{**data,'displayId':'unknown'},headers)
+        self.denied(400,self.manager,route,{**data,'source':'http://user:secret@example.org','replace':True},headers)
+        with self.request(self.manager,route,{**data,'replace':True},headers) as response:
+            connection=json.load(response)
+            self.assertEqual(response.headers['Cache-Control'],'no-store')
+        self.assertEqual(connection['displayId'],'gate-01')
+        self.assertEqual(connection['airport'],'ROR')
+        self.assertNotEqual(connection['token'],self.token)
+        self.denied(401,self.source,'/api/feed?airport=ROR&displayId=gate-01',headers=self.credentials())
+        with self.request(self.source,'/api/feed?airport=ROR&displayId=gate-01',headers={'Authorization':'Bearer '+connection['token']}) as response:
+            self.assertEqual(response.status,200)
+        self.assertNotIn(connection['token'],self.config_path.read_text())
+        records=self.store.audit_records('ROR')
+        self.assertNotIn(connection['token'],json.dumps(records))
+        self.assertIn('terminal.connection.reissue',json.dumps(records))
+
+    def test_connection_issuance_uses_separate_lan_credentials(self):
+        from pifids.registry import save_terminal
+        save_terminal(self.store,{'airport':'ROR','displayId':'new-display','name':'New display','usage':'signage'})
+        path=self.path/'separate-lan.json';write_private(path,{**self.config,'terminals':{}})
+        lan_security=Security(path)
+        manager=self.start(manager_handler(self.store,self.security,terminal_security=lan_security,terminal_source=self.source))
+        with self.request(manager,'/api/login',{'username':'test','password':'synthetic-test-password'}) as response:
+            headers={'Cookie':response.headers['Set-Cookie']}
+        with self.request(manager,'/api/terminal-connections/issue',{'airport':'ROR','displayId':'new-display','source':self.source},headers) as response:
+            connection=json.load(response)
+        self.assertIsNone(self.security.terminal({'Authorization':'Bearer '+connection['token']}))
+        self.assertEqual(lan_security.terminal({'Authorization':'Bearer '+connection['token']}),('ROR','new-display'))
+        with self.request(manager,'/api/terminal-connections',headers=headers) as response:
+            self.assertEqual(json.load(response)['source'],self.source)
+
+
+if __name__ == '__main__':
+    unittest.main()

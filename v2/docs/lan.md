@@ -26,7 +26,17 @@ python3 -m pifids --auth-config manager-auth.json --lan-port 8803
 
 ログイン画面はPi-Access Proと同じ空港背景・青いオーバーレイ・白いカード・MKM Airworksロゴを使用する。背景とロゴをFIDSに同梱するため、外部サイトへの画像取得は不要。英語を既定に、日本語への切替を管理ブラウザに保存する。
 
-## 端末の接続ファイルを発行
+## 管理画面から接続ファイルを発行（日英）
+
+管理者で③「端末の設定」を開き、端末を登録・保存します。一覧の「接続設定」、または「接続設定を発行・ダウンロード」を押します。配信先URL（例：`http://192.168.1.20:8805`）を確認して発行し、ダウンロードした `ROR-gate-01.connection.json` を対象端末のセットアップで指定します。表示端末自身のIP登録は不要です。
+
+Sign in as an administrator, open **3. Terminal settings**, and save the terminal registration. Select **Connection settings** in its row, or **Issue and download connection settings**. Verify the management PC feed URL and issue the file. Select the downloaded `.connection.json` during display setup. No display PC IP registration is required.
+
+再発行には確認が必要で、旧キーは直ちに失効します。新しい設定を端末へ適用するまで新規受信は停止します。発行履歴は監査ログに残しますが、キー自体は保存しません。接続ファイルは秘密情報として扱い、GitHubや共有資料へ保存しないでください。別サービスでLAN配信している構成では、管理サービスに `--terminal-auth-config` で実際の配信用認証ファイルを指定します。`--terminal-source` で配信先URLの初期値を指定できます。
+
+Reissuing requires confirmation and immediately revokes the old key. New reception stops until the display uses the replacement file. Audit records exclude the secret. Keep connection files private and out of GitHub/shared documentation. When a separate process serves the LAN feed, configure the manager with `--terminal-auth-config` pointing to that process’s credential file. Use `--terminal-source` to prefill the feed origin.
+
+## コマンドから端末の接続ファイルを発行
 
 管理PCのLANアドレスを固定・予約してから実行する。`192.168.1.20` は例なので実際の管理PCアドレスへ置き換える。
 
