@@ -11,3 +11,13 @@ In ③ Terminal settings, select a registered terminal and choose Flight board. 
 Portrait uses six flight cards per page. Also set the Windows display orientation to Portrait. Landscape retains the existing table layout.
 
 Classification uses the optional geo field from CSV or Web releases: DOM or INTL. It can also be edited in ① Flight information. Unclassified flights appear only under All. If the Web feed omits geo, set it in the flight editor. Display windows, expiry, and delayed-flight carryover still apply.
+
+## コードシェア便 / Codeshares
+
+①フライト情報管理の便編集に「コードシェア便」を入力します（例：NH6467, PR999）。追加・変更後は保存し、下書きを公開してください。空欄で保存・公開するとコードシェア便を削除できます。運航便の行自体は残ります。
+
+③端末の設定の「コードシェア便を表示」で有効／無効を選び、切替間隔を3～60秒で設定できます（初期値5秒・有効）。運航便→コードシェア便の順でロゴと便名を同時に切り替え、時刻・行先・ゲート・備考は固定します。言語切替とは独立して動きます。登録済みの航空会社ロゴを使用し、ロゴがない場合は登録済み航空会社名、名称もない場合は航空会社コードを表示します。
+
+In ① Flight information, edit a flight and enter comma-separated codeshare flight numbers (for example NH6467, PR999). Save and publish the draft. Clear the field, save and publish to remove codeshares while retaining the operating flight.
+
+In ③ Terminal settings, enable/disable Show codeshare flights and set a 3–60 second interval (enabled, 5 seconds by default). The airline logo and flight number rotate together, operating flight first and then codeshares. Time, route, gate and remarks remain unchanged. Language rotation is independent. Registered airline logos are used; missing logos fall back to the registered airline name, or the airline code if no name is registered.

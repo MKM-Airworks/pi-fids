@@ -88,3 +88,10 @@ test('domestic/international filters preserve direction and time rules and exclu
  assert.equal(p.visible(rows,'departure',{},now).length,3);
  assert.deepEqual(p.visible(rows,'arrival',{board:{traffic:'international'}},now).map(r=>r.flightNumber),['ARR']);
 });
+
+test('codeshares rotate as one identity at exact interval boundaries without changing the operation',()=>{
+ const f={flightNumber:'UA142',codeshareFlights:['NH6467','PR999','NH6467'],time:'20:00',gate:'3'};
+ const before=JSON.stringify(f);
+ assert.equal(p.codeshareNumber(f,{},0),'UA142');assert.equal(p.codeshareNumber(f,{},4999),'UA142');assert.equal(p.codeshareNumber(f,{},5000),'NH6467');assert.equal(p.codeshareNumber(f,{},10000),'PR999');assert.equal(p.codeshareNumber(f,{},15000),'UA142');
+ assert.equal(p.codeshareNumber(f,{codeshareEnabled:false},5000),'UA142');assert.equal(p.codeshareNumber(f,{codeshareInterval:7},7000),'NH6467');assert.equal(p.codeshareNumber({flightNumber:'BC101'},{},10000),'BC101');assert.equal(JSON.stringify(f),before);
+});

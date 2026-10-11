@@ -24,6 +24,13 @@ def validate(data):
     if type(interval) is not int or not 3<=interval<=60:raise ValueError('Language interval must be 3 to 60 seconds')
     result['languages']=languages
     result['languageInterval']=interval
+    if 'codeshareEnabled' in data:
+        if type(data['codeshareEnabled']) is not bool:raise ValueError('Invalid codeshare display setting')
+        result['codeshareEnabled']=data['codeshareEnabled']
+    if 'codeshareInterval' in data:
+        interval=data['codeshareInterval']
+        if type(interval) is not int or not 3<=interval<=60:raise ValueError('Codeshare interval must be 3 to 60 seconds')
+        result['codeshareInterval']=interval
     for key in ('departureShowMinutes','arrivalShowMinutes'):
         if key in data:
             value=data[key]

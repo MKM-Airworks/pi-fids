@@ -49,6 +49,12 @@ def validate(data, zone='Asia/Tokyo'):
     if direction not in ('departure', 'arrival'):
         raise ValueError('Invalid flight direction')
     extra = {}
+    shares=data.get('codeshareFlights',data.get('codeshares',[]))
+    if isinstance(shares,str):shares=re.split(r'[,;、\s]+',shares.strip()) if shares.strip() else []
+    if not isinstance(shares,list) or len(shares)>30 or any(not isinstance(x,str) or not re.fullmatch(r'[A-Z0-9]{2,3}[0-9]{1,5}[A-Z]?',x.strip().upper().replace(' ','')) for x in shares):raise ValueError('Enter up to 30 codeshare flight numbers separated by commas')
+    shares=list(dict.fromkeys(x.strip().upper().replace(' ','') for x in shares))
+    shares=[x for x in shares if x!=data['flightNumber'].strip().upper().replace(' ','')]
+    if shares or 'codeshares' in data or 'codeshareFlights' in data:extra['codeshareFlights']=shares
     geo=data.get('geo','')
     if geo not in ('','DOM','INTL'):raise ValueError('Select domestic or international')
     if geo:extra['geo']=geo
