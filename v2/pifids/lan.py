@@ -126,7 +126,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.wfile.write(b'{}')
                 return
             identity=security.identity(self.headers)
-            operator_paths={'/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/check','/api/upstream/import','/api/signage'}
+            operator_paths={'/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/check','/api/upstream/import','/api/signage','/api/schedules/csv/preview','/api/schedules/csv/import'}
             if identity['role']!='admin' and self.path not in operator_paths:
                 return self.send(403,{'error':'Administrator access required'})
             # Inspect airport before the existing write handler consumes the body.
@@ -134,7 +134,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
             original = self.rfile
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= (3*1024*1024 if self.path == '/api/assets' else 16384):
+                if not 0 < size <= (3*1024*1024 if self.path == '/api/assets' else 262144 if self.path.startswith('/api/schedules/csv/') else 16384):
                     raise ValueError('Invalid request size')
                 body = original.read(size)
                 if json.loads(body).get('airport') != security.config()['airport']:

@@ -20,7 +20,9 @@
  function visible(flights,direction,control={},now=Date.now()){
   const key=direction==='arrival'?'arrivalHideMinutes':'departureHideMinutes';
   const value=control[key];const minutes=Number.isInteger(value)&&value>=0&&value<=10080?value:(direction==='arrival'?120:10);
-  return flights.filter(flight=>(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
+  const opening=control.board?.[direction+'ShowMinutes'];
+  const started=flight=>Number.isInteger(opening)?now>=timestamp(flight.serviceDate,flight.time)-opening*minute:flight.serviceDate<=today(now);
+  return flights.filter(flight=>started(flight)&&(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
    .sort((a,b)=>effective(a)-effective(b)||a.flightNumber.localeCompare(b.flightNumber));
  }
  const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];

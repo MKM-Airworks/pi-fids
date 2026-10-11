@@ -294,6 +294,9 @@ class Upstream:
                     raise DraftConflict('Draft changed. Review it again before importing.')
                 rows = json.loads(draft)
                 old = db.execute('SELECT flight_ids,service_date,baseline FROM upstream_imports WHERE airport=?',(airport,)).fetchone()
+                local_exists=db.execute("SELECT 1 FROM sqlite_master WHERE name='local_schedule_cache'").fetchone()
+                local=db.execute('SELECT flight_ids,service_date,baseline FROM local_schedule_cache WHERE airport=?',(airport,)).fetchone() if local_exists else None
+                if local:old=local
                 old_ids = set(json.loads(old[0])) if old else set()
                 manual = [row for row in rows if row['id'] not in old_ids]
                 existing = {row['id']:row for row in rows if row['id'] in old_ids}
@@ -313,9 +316,11 @@ class Upstream:
                     if flight['remark']=='Cancelled':
                         extras['remark']='Cancelled'
                     imported.append({**flight,**extras})
-                imported = carried+imported
+                future=[row for row in existing.values() if row['serviceDate']>service_date]
+                imported = carried+imported+future
                 if len(manual)+len(imported)>100:
                     raise ValueError('Current FIDS limit: 100 flights')
+                if local:db.execute('DELETE FROM local_schedule_cache WHERE airport=?',(airport,))
                 db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?',(json.dumps(manual+imported),airport))
                 after_by_id={row['id']:row for row in imported}
                 for flight_id in sorted(set(existing)|set(after_by_id)):

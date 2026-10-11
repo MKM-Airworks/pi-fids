@@ -33,7 +33,7 @@ test('midnight, future services and offline stale data retain their actual date'
  assert.equal(p.visible([row],'departure',{},t('2026-10-06T00:29:59')).length,1);
  assert.equal(p.visible([row],'departure',{},t('2026-10-06T00:30:00')).length,0);
  assert.equal(p.visible([row],'departure',{},t('2026-10-07T00:00:00')).length,0);
- assert.equal(p.visible([flight({serviceDate:'2026-10-06'})],'departure',{},t('2026-10-05T10:30:00')).length,1);
+ assert.equal(p.visible([flight({serviceDate:'2026-10-06'})],'departure',{},t('2026-10-05T10:30:00')).length,0);
  assert.equal(p.today(Date.parse('2026-10-05T15:01:00Z')),'2026-10-06');
 });
 test('column choices are independent for departures and arrivals',()=>{
@@ -65,4 +65,17 @@ test('terminal languages rotate in order, independently on each screen',()=>{
  assert.equal(p.language(first,0),'en');assert.equal(p.language(first,8000),'ja');assert.equal(p.language(first,16000),'en');
  assert.equal(p.language(second,10000),'ja');assert.equal(p.language(second,20000),'zh-Hans');assert.equal(p.language(second,30000),'en');
  assert.equal(p.language({languages:['ja'],languageInterval:8},24000),'ja');
+});
+
+test('ROR next-day departure opens exactly STD minus six hours regardless of delay',()=>{
+ try{
+  p.configureTimezone('Pacific/Palau');
+  const row=flight({serviceDate:'2026-10-06',time:'02:05',estimatedTime:'04:00'});
+  const now=Date.parse('2026-10-05T20:05:00+09:00');
+  assert.equal(p.visible([row],'departure',{board:{departureShowMinutes:360}},now-1).length,0);
+  assert.equal(p.visible([row],'departure',{board:{departureShowMinutes:360}},now).length,1);
+  assert.equal(p.visible([row],'departure',{board:{departureShowMinutes:120}},now).length,0);
+  assert.equal(p.visible([row],'departure',{},now).length,0);
+  assert.equal(p.visible([{...row,direction:'arrival'}],'arrival',{board:{arrivalShowMinutes:360}},now).length,1);
+ }finally{p.configureTimezone('Asia/Tokyo');}
 });

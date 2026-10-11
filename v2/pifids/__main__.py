@@ -109,9 +109,12 @@ def handler(store, upstream=None, os_clock=None):
                 return self.send(403, {'error': 'Invalid origin'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= (3 * 1024 * 1024 if self.path == '/api/assets' else 16384):
+                if not 0 < size <= (3 * 1024 * 1024 if self.path == '/api/assets' else 262144 if self.path.startswith('/api/schedules/csv/') else 16384):
                     raise ValueError('Invalid request size')
                 data = json.loads(self.rfile.read(size))
+                if self.path in ('/api/schedules/csv/preview','/api/schedules/csv/import'):
+                    from .seasonal_csv import preview, import_draft
+                    return self.send(200,(preview if self.path.endswith('/preview') else import_draft)(store,data))
                 if self.path == '/api/assets':
                     return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/airline-names':

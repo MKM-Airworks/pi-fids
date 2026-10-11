@@ -82,3 +82,21 @@ Previous-day flights retain their original service date and their estimated/actu
 ## 配信認証・権限制限の確認記録
 
 SHI実機で受信と書き込み拒否を確認した。認証は配信サーバーで毎回行い、受信資格情報は組織・空港・製品に固定される。詳細と確認範囲は[確認記録](web-feed-security-20261009.md)を参照。
+
+
+### 端末ごとの表示開始時間 / Terminal display start
+
+③端末の設定で「出発便の表示開始時間（STD − XXX分）」と「到着便の表示開始時間（STA − XXX分）」を設定します。0〜10080分、空欄は当日便すべてです。判定は設置空港の現地時刻で行います。360分の場合、翌日02:05便は前日20:05から表示対象です。ETD／ETAの変更は表示開始時刻に影響しません。表示終了と翌日へ持ち越す遅延便は従来の設定に従います。
+
+保存済みの検証済みシーズナルダイヤから、各端末で必要になる翌日以降の便を60秒ごとに準備・公開します。Web受信を手動にしていても、インターネットが切れていても動作します。初めて表示対象となる便の準備には最大約60秒かかります。未公開の編集がある場合は上書きせず、確認・公開を待ちます。有効期間外のダイヤは生成しません。公開便数は持越し便を含め100便までです。
+
+In section 3, configure Departure display start (STD − XXX minutes) and Arrival display start (STA − XXX minutes), from 0 to 10080 minutes. Blank shows all flights of the current local service day. A 02:05 departure with 360 minutes starts at 20:05 on the previous day. Delays do not change the opening time; existing expiry and overnight delay rules still apply.
+
+The management PC prepares required future operations from the last verified seasonal release every 60 seconds, including in manual Web mode and without an Internet connection. Preparation may take up to approximately 60 seconds at the opening boundary. Unpublished edits require review before automatic preparation continues. Coverage expiry and the 100-flight publication limit still apply.
+
+
+### CSVシーズナルダイヤ / Seasonal CSV
+
+①便情報に「CSVダイヤ取り込み」を追加しました。MKM Flight Webから出力したUTF-8 CSV（BOM可、128KBまで）を選び、運航日を指定して「CSVを確認」→「CSVを下書きへ取込み」→「下書きを公開」の順に操作します。公開後、保存した有効期間・曜日から毎日の便と表示開始時刻になった翌日以降の便を準備します。空港違い、曜日・時刻の不正、同一便の重複期間は拒否します。CSVは当該空港のシーズナル生成元となり、Web認証・受信を使いません。監査情報元はCSV seasonal scheduleです。コードシェア欄は保存しますが、別便として増やしません。新しいWebダイヤを取り込んだ場合は生成元をWebへ戻します。
+
+Section 1 includes Import seasonal CSV. Select the UTF-8 MKM Flight Web export (BOM accepted, up to 128 KB), choose a service date, then Preview CSV → Import CSV into draft → Publish draft. Validity and weekdays drive offline daily generation and future display windows. Incorrect airport, invalid days/times and overlapping operations are rejected. CSV becomes this airport's seasonal source without a Web credential; audit source is CSV seasonal schedule. Codeshares are retained as schedule metadata, not additional board rows. Importing a new Web release switches the source back to Web.

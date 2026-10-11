@@ -41,3 +41,9 @@ class ConfigurationTests(unittest.TestCase):
         config=board_config.validate({'direction':'departure'})
         self.assertEqual(config['languages'],['en','ja'])
         self.assertEqual(config['languageInterval'],8)
+
+    def test_start_window_validation_and_legacy_blank(self):
+        config=board_config.validate({'direction':'departure','departureShowMinutes':360,'arrivalShowMinutes':None})
+        self.assertEqual(config['departureShowMinutes'],360);self.assertIsNone(config['arrivalShowMinutes'])
+        for value in (-1,10081,True,3.5,'360'):
+            with self.assertRaises(ValueError):board_config.validate({'direction':'departure','departureShowMinutes':value})

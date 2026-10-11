@@ -20,6 +20,11 @@ def validate(data):
     if type(interval) is not int or not 3<=interval<=60:raise ValueError('Language interval must be 3 to 60 seconds')
     result['languages']=languages
     result['languageInterval']=interval
+    for key in ('departureShowMinutes','arrivalShowMinutes'):
+        if key in data:
+            value=data[key]
+            if value is not None and (type(value) is not int or not 0<=value<=10080):raise ValueError('Display start must be 0 to 10080 minutes or blank')
+            result[key]=value
     result['logo']=logo
     return result
 

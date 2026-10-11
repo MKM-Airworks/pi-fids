@@ -115,4 +115,46 @@ class DailyTests(unittest.TestCase):
         self.assertEqual({x['serviceDate'] for x in self.store.read('SHI')['flights']},{'2026-10-06'})
 
 
+    def test_future_window_prepares_offline_before_midnight_and_preserves_edits(self):
+        self.initial()
+        with self.store.connect() as db:
+            db.execute('INSERT INTO board_settings VALUES (?,?,?)',('SHI','six-hours',json.dumps({'departureShowMinutes':360})))
+        daily=DailySchedules(self.store)
+        daily.step(self.at('2026-10-05','23:00:00'))
+        # Fixture next-day departure is 10:30, so it has not opened yet.
+        self.assertEqual(len(self.store.read('SHI')['flights']),2)
+        daily.step(self.at('2026-10-06','04:30:00'))
+        self.assertEqual({r['serviceDate'] for r in self.store.read('SHI')['flights']},{'2026-10-06'})
+        # Increase window to cover tomorrow's operation before midnight.
+        with self.store.connect() as db:
+            db.execute('UPDATE board_settings SET body=?',(json.dumps({'departureShowMinutes':1440}),))
+        daily.step(self.at('2026-10-06','11:00:00'))
+        current=self.store.read('SHI');future=next(r for r in current['draft'] if r['serviceDate']=='2026-10-07')
+        self.store.change_flight({**future,'gate':'9','estimatedTime':'11:30','expectedDraftRevision':current['draftRevision']})
+        self.store.publish('SHI')
+        daily.step(self.at('2026-10-07','00:00:00'))
+        rows=self.store.read('SHI')['flights']
+        self.assertEqual(len(rows),2)
+        self.assertEqual(next(r for r in rows if r['direction']=='departure')['gate'],'9')
+        version=self.store.read('SHI')['version'];daily.step(self.at('2026-10-07','00:01:00'))
+        self.assertEqual(self.store.read('SHI')['version'],version)
+
+    def test_early_departure_generated_on_previous_evening_without_web(self):
+        import hashlib
+        body=json.loads(self.raw)
+        body['flights'][0]['scheduledTime']='02:05'
+        self.raw=json.dumps(body).encode()
+        self.manifest.update(sha256=hashlib.sha256(self.raw).hexdigest(),byteLength=len(self.raw))
+        self.initial()
+        with self.store.connect() as db:
+            db.execute('INSERT INTO board_settings VALUES (?,?,?)',('SHI','early',json.dumps({'departureShowMinutes':360})))
+        daily=DailySchedules(self.store)
+        daily.step(self.at('2026-10-05','20:04:59'))
+        self.assertFalse(any(r['serviceDate']=='2026-10-06' for r in self.store.read('SHI')['flights']))
+        daily.step(self.at('2026-10-05','20:05:00'))
+        future=[r for r in self.store.read('SHI')['flights'] if r['serviceDate']=='2026-10-06']
+        self.assertEqual(len(future),1)
+        self.upstream.import_draft('SHI','2026-10-05',self.store.read('SHI')['draftRevision'],1)
+        self.assertEqual([r for r in self.store.read('SHI')['draft'] if r['serviceDate']=='2026-10-06'],future)
+
 if __name__=='__main__':unittest.main()

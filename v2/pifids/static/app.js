@@ -182,7 +182,7 @@ async function loadDisplayControl(){
  for(const key of ['departureHideMinutes','arrivalHideMinutes'])$('displayForm').elements[key].value=control[key];
  $('defaultImage').value=control.signage?.defaultImage||'';$('defaultImageFile').value='';
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
- $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;
+ $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;for(const direction of ['departure','arrival'])$(direction+'ShowMinutes').value=control.board?.[direction+'ShowMinutes']??'';
  for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
  $('terminalProfile').replaceChildren();for(const profile of [{name:mt('なし'),value:''},...registryState.profiles.map(p=>({name:p.name,value:p.name}))]){const option=document.createElement('option');option.value=profile.value;option.textContent=profile.name;$('terminalProfile').append(option);}$('terminalProfile').value=terminal?.profileName||'';boardFormVisibility();
 }
@@ -252,7 +252,7 @@ if(manager){
 
 function boardDirection(){return displayConfig.board?.direction||settings.direction;}
 function boardColumns(){return BoardPolicy.selectedColumns(displayConfig.board,boardDirection());}
-function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value)};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
+function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value)};for(const direction of ['departure','arrival'])data[direction+'ShowMinutes']=$(direction+'ShowMinutes').value===''?null:Number($(direction+'ShowMinutes').value);for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
 function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalUsage').value!=='signage';
  const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;$('defaultImageSettings').hidden=board;
  for(const input of $('boardTerminalSettings').querySelectorAll('input,select'))input.disabled=!board;
@@ -346,7 +346,7 @@ function renderWebSync(result){
  $('upstreamTimes').textContent=t('最終受信：','Last received: ')+format(result.lastSuccess)+' · '+t('最終公開：','Last publication: ')+format(result.lastPublish)+' · '+t('接続確認：','Connection checked: ')+format(result.lastAttempt);
  const daily=result.dailySchedule;
  const dailyStates={review_required:t('未公開の変更を確認・公開してください。','Review and publish pending changes.'),expired:t('保存済みダイヤの有効期間が終了しています。','The saved schedule has expired.'),not_yet_effective:t('保存済みダイヤは有効期間前です。','The saved schedule is not yet effective.'),failed:t('日次更新に失敗しました。最後の公開情報を保持しています。','Daily publication failed. Keeping the last publication.'),waiting_for_first_import:t('最初にダイヤを取り込み・公開してください。','Import and publish a schedule first.'),future_publication:t('未来日の便が取り込まれています。運航日を確認してください。','Future services have been imported. Check the service date.')};
- $('upstreamDaily').textContent=t('日次更新：空港の現地日付が変わった後、1分以内に保存済みダイヤから当日便を自動公開します。Web未接続でも動作します。前日から遅延した便は表示終了時刻まで併せて表示します。','Daily update: publishes today’s flights from the saved schedule within one minute after local midnight, even without Web access. Delayed flights from earlier days remain until their display deadlines.')+(dailyStates[daily?.result]?' '+dailyStates[daily.result]:'');
+ $('upstreamDaily').textContent=t('保存済みダイヤから当日便と、表示開始時間になった翌日以降の便を1分以内に準備・公開します。Web未接続でも動作します。遅延便は表示終了時刻まで表示します。','Prepares and publishes today’s flights and future flights reaching their display start within one minute, even without Web access. Delayed flights remain until their display deadlines.')+(dailyStates[daily?.result]?' '+dailyStates[daily.result]:'');
  const states={review_required:t('未公開の変更があります。下書きを確認・公開してから自動同期を再開します。','Unpublished changes require review and publication before automatic sync can resume.'),not_applicable:t('当日適用できるWeb情報がありません。最後の公開情報を保持しています。','No applicable Web data for today. Keeping last published data.'),failed:t('自動同期に失敗しました。最後の公開情報を保持し、次回再試行します。','Automatic sync failed. Keeping last published data and retrying next time.')};
  if(states[result.autoResult])$('upstreamConnection').textContent+=' · '+states[result.autoResult];
 }
