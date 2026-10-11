@@ -30,6 +30,8 @@ def handler(store, upstream=None, os_clock=None):
             files['/static/signage-policy.js'] = ('static/signage-policy.js','text/javascript')
             files['/static/airport-names.js'] = ('static/airport-names.js', 'text/javascript')
             files['/backup-guide'] = ('templates/backup-guide.html','text/html')
+            files['/static/manager-feedback.js'] = ('static/manager-feedback.js','text/javascript')
+            files['/static/asset-browser.js'] = ('static/asset-browser.js','text/javascript')
             files['/static/backups.js'] = ('static/backups.js','text/javascript')
             files['/static/users-audit.js'] = ('static/users-audit.js','text/javascript')
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
@@ -67,6 +69,10 @@ def handler(store, upstream=None, os_clock=None):
                     self.send(200, {**store.read(parse_qs(url.query).get('airport', ['SHI'])[0]),'clock':store.clock()})
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
+            elif url.path == '/api/assets/catalog':
+                from .asset_catalog import catalog
+                try:self.send(200,catalog(store,parse_qs(url.query).get('airport',['SHI'])[0]))
+                except ValueError as error:self.send(400,{'error':str(error)})
             elif url.path in ('/api/assets', '/asset'):
                 try:
                     query = parse_qs(url.query)
@@ -115,6 +121,9 @@ def handler(store, upstream=None, os_clock=None):
                 if self.path in ('/api/schedules/csv/preview','/api/schedules/csv/import'):
                     from .seasonal_csv import preview, import_draft
                     return self.send(200,(preview if self.path.endswith('/preview') else import_draft)(store,data))
+                if self.path == '/api/assets/delete':
+                    from .asset_catalog import delete
+                    return self.send(200,delete(store,data))
                 if self.path == '/api/assets':
                     return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/airline-names':

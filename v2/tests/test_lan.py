@@ -150,3 +150,21 @@ class LanTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+    def test_asset_catalog_and_delete_api(self):
+        self.denied(401,self.manager,'/api/assets/catalog?airport=ROR')
+        self.denied(404,self.source,'/api/assets/catalog?airport=ROR',headers=self.credentials())
+        self.denied(405,self.source,'/api/assets/delete',{'airport':'ROR'},self.credentials())
+        with self.request(self.manager,'/api/login',{'username':'test','password':'synthetic-test-password'}) as response:
+            headers={'Cookie':response.headers['Set-Cookie'].split(';')[0]}
+        digest=self.store.upload_asset({'airport':'ROR','name':'unused.png','body':base64.b64encode(png()).decode()})
+        self.denied(403,self.manager,'/api/assets/catalog?airport=SHI',headers=headers)
+        with self.request(self.manager,'/api/assets/catalog?airport=ROR',headers=headers) as response:
+            self.assertTrue(next(x for x in json.load(response) if x['digest']==digest)['canDelete'])
+        with self.request(self.manager,'/api/assets/delete',{'airport':'ROR','digest':digest},headers) as response:
+            self.assertTrue(json.load(response)['ok'])
+        self.assertEqual(self.store.assets('ROR'),[])
+        for script in ('manager-feedback.js','asset-browser.js'):
+            with self.request(self.manager,'/static/'+script,headers=headers) as response:
+                self.assertEqual(response.status,200)
+                self.assertIn('javascript',response.headers['Content-Type'])
