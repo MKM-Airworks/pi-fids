@@ -56,3 +56,12 @@ body[data-view=manager] .manager-sidebar{overflow-y:auto}body[data-view=manager]
 .signage-actions>select{display:block;width:100%;min-width:0;max-width:440px;}
 .signage-actions input{max-width:160px;}
 .signage-actions button{display:block;}
+
+body[data-view=manager] button:active{transform:translateY(1px);filter:brightness(.85)}
+body[data-view=manager] button[data-action-busy=true]{cursor:wait;opacity:.72}
+button[data-action-busy=true]::before{content:'';display:inline-block;width:12px;height:12px;margin-right:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:action-spin .8s linear infinite}
+#actionFeedback{position:fixed;bottom:24px;left:calc(50% + 100px);transform:translateX(-50%);z-index:1000;max-width:min(640px,90vw);padding:16px 24px;border-radius:10px;background:#173b56;color:#fff;box-shadow:0 4px 20px #0003;font-size:15px;white-space:pre-wrap}
+#actionFeedback[data-busy=true]{background:#075f87}
+@keyframes action-spin{to{transform:rotate(360deg)}}
+@media(max-width:650px){#actionFeedback{left:50%;bottom:16px;width:calc(100% - 32px);box-sizing:border-box}}
+@media(prefers-reduced-motion:reduce){button[data-action-busy=true]::before{animation:none}}
