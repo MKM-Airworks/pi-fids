@@ -204,6 +204,10 @@
               "DOM",
               "INTL"
             ]
+          },
+          "belt": {
+            "type": "string",
+            "maxLength": 20
           }
         },
         "required": [

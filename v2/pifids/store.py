@@ -58,7 +58,7 @@ def validate(data, zone='Asia/Tokyo'):
     geo=data.get('geo','')
     if geo not in ('','DOM','INTL'):raise ValueError('Select domestic or international')
     if geo:extra['geo']=geo
-    for key, limit in (('estimatedTime', 5), ('actualTime', 5), ('gate', 20), ('remark', 100)):
+    for key, limit in (('estimatedTime', 5), ('actualTime', 5), ('gate', 20), ('belt', 20), ('remark', 100)):
         value = data.get(key, '')
         if not isinstance(value, str) or len(value) > limit:
             raise ValueError('Invalid ' + key)

@@ -18,18 +18,18 @@ try{settings={...settings,...JSON.parse(localStorage.getItem(settingsKey)||'{}')
 const boardWords={ja:['定刻','予定','行先／経由','航空会社','便名','ゲート','備考','出発地／経由','到着便'],en:['STD','ETD','Destination / Via','Airline','Flight','Gate','Remark','Origin / Via','Arrivals'],'zh-Hant':['預定','預計','目的地／經由','航空公司','航班','登機口','備註','出發地／經由','抵達航班'],'zh-Hans':['预定','预计','目的地／经由','航空公司','航班','登机口','备注','出发地／经由','到达航班'],ko:['예정','예상','목적지 / 경유','항공사','항공편','게이트','비고','출발지 / 경유','도착편']};
 function table(rows,display=false,draft=false){
  const board=document.createElement('table'), head=board.createTHead().insertRow();
- const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,7);
+ const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,7).concat(({ja:'ベルト',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt');
  if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
  const columns=display?boardColumns():null;
- for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','備考','コードシェア便','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
+ for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','ベルト','備考','コードシェア便','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
  const body=board.createTBody();
  for(const flight of rows){
   const shownNumber=display?BoardPolicy.codeshareNumber(flight,displayConfig.board,fidsNow()):flight.flightNumber;
   const row=body.insertRow();const langs=display?[settings.language]:[];row.lang=settings.language;
-  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(shownNumber,row.lang)||airlineCode(shownNumber),shownNumber,flight.gate||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',(flight.codeshareFlights||[]).join(', '),mt('端末ごとに設定')];
+  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(shownNumber,row.lang)||airlineCode(shownNumber),shownNumber,flight.gate||'',flight.remark||'',flight.belt||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.belt||'',flight.remark||'',(flight.codeshareFlights||[]).join(', '),mt('端末ごとに設定')];
   const shown=display?columns.map(key=>values[BoardPolicy.columns.indexOf(key)]):values;
   for(const value of shown){const cell=row.insertCell();cell.textContent=value;}
-  if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
+  if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,belt:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
   if(draft){
    const cell=row.insertCell();
    function button(label,action){const node=document.createElement('button');node.type='button';node.textContent=mt(label);node.onclick=action;cell.append(node);}
@@ -47,8 +47,8 @@ function table(rows,display=false,draft=false){
  return board;
 }
 function portraitBoard(rows){
- const list=document.createElement('div');const columns=boardColumns(),labels=(boardWords[settings.language]||boardWords.en).slice(0,7),arrival=boardDirection()==='arrival';if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
- for(const flight of rows){const shownNumber=BoardPolicy.codeshareNumber(flight,displayConfig.board,fidsNow());const card=document.createElement('section');card.className='portrait-flight';const values={scheduled:flight.time,estimated:flight.estimatedTime||'',destination:AirportNames.label(state?.airportNames,flight.destination,settings.language),airline:airlineLabel(shownNumber,settings.language)||airlineCode(shownNumber),flight:shownNumber,gate:flight.gate||'',remark:flight.remark||''};for(const key of columns){const block=document.createElement('div');block.dataset.column=key;const label=document.createElement('small');label.textContent=labels[BoardPolicy.columns.indexOf(key)];const value=document.createElement('strong');value.textContent=values[key];if(key==='airline'){const logo=airlineEntry(shownNumber)?.logo||(shownNumber===flight.flightNumber?flight.airlineLogo:'');if(logo&&assetUrls[logo]){const img=document.createElement('img');img.className='portrait-logo';img.src=assetUrls[logo];img.alt=values.airline;value.replaceChildren(img);}}block.append(label,value);card.append(block);}list.append(card);}return list;
+ const list=document.createElement('div');const columns=boardColumns(),labels=(boardWords[settings.language]||boardWords.en).slice(0,7).concat(({ja:'ベルト',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt'),arrival=boardDirection()==='arrival';if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
+ for(const flight of rows){const shownNumber=BoardPolicy.codeshareNumber(flight,displayConfig.board,fidsNow());const card=document.createElement('section');card.className='portrait-flight';const values={scheduled:flight.time,estimated:flight.estimatedTime||'',destination:AirportNames.label(state?.airportNames,flight.destination,settings.language),airline:airlineLabel(shownNumber,settings.language)||airlineCode(shownNumber),flight:shownNumber,gate:flight.gate||'',belt:flight.belt||'',remark:flight.remark||''};for(const key of columns){const block=document.createElement('div');block.dataset.column=key;const label=document.createElement('small');label.textContent=labels[BoardPolicy.columns.indexOf(key)];const value=document.createElement('strong');value.textContent=values[key];if(key==='airline'){const logo=airlineEntry(shownNumber)?.logo||(shownNumber===flight.flightNumber?flight.airlineLogo:'');if(logo&&assetUrls[logo]){const img=document.createElement('img');img.className='portrait-logo';img.src=assetUrls[logo];img.alt=values.airline;value.replaceChildren(img);}}block.append(label,value);card.append(block);}list.append(card);}return list;
 }
 function render(){
  if(!state)return;
@@ -101,7 +101,7 @@ function resetEditor(){editing=null;$('flightForm').reset();$('flightForm').elem
 function editFlight(flight){
  $('flightEditor').open=true;
  editing={id:flight.id,expectedDraftRevision:state.draftRevision};pendingDelete=null;
- for(const key of ['flightNumber','destination','serviceDate','time','estimatedTime','estimatedDate','actualTime','actualDate','gate','remark','airlineLogo','direction','geo'])$('flightForm').elements[key].value=flight[key]||(key==='direction'?'departure':'');
+ for(const key of ['flightNumber','destination','serviceDate','time','estimatedTime','estimatedDate','actualTime','actualDate','gate','belt','remark','airlineLogo','direction','geo'])$('flightForm').elements[key].value=flight[key]||(key==='direction'?'departure':'');
  $('flightForm').elements.codeshares.value=(flight.codeshareFlights||[]).join(', ');
  selected=[...(flight.languages||[])];for(const [index,box]of [...$('languages').querySelectorAll('input')].entries())box.checked=selected.includes(Object.keys(names)[index]);
  $('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');render();$('flightForm').scrollIntoView({behavior:'smooth',block:'start'});
@@ -191,7 +191,7 @@ async function loadDisplayControl(){
  $('defaultImage').value=control.signage?.defaultImage||'';$('defaultImageFile').value='';
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
  $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('terminalTraffic').value=control.board?.traffic||'all';$('terminalOrientation').value=control.board?.orientation||'landscape';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;$('terminalCodeshareEnabled').checked=control.board?.codeshareEnabled!==false;$('terminalCodeshareInterval').value=control.board?.codeshareInterval||5;for(const direction of ['departure','arrival'])$(direction+'ShowMinutes').value=control.board?.[direction+'ShowMinutes']??'';
- for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
+ for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns.filter(x=>x!=='belt')).includes(box.value);
  $('terminalProfile').replaceChildren();for(const profile of [{name:mt('なし'),value:''},...registryState.profiles.map(p=>({name:p.name,value:p.name}))]){const option=document.createElement('option');option.value=profile.value;option.textContent=profile.name;$('terminalProfile').append(option);}$('terminalProfile').value=terminal?.profileName||'';boardFormVisibility();
 }
 
@@ -267,8 +267,8 @@ function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalU
  $('departureColumnSettings').hidden=$('terminalDirection').value!=='departure';$('arrivalColumnSettings').hidden=$('terminalDirection').value!=='arrival';
 }
 if(manager){
- const labels={scheduled:'定刻',estimated:'予定時刻',destination:'行先／出発地',airline:'航空会社ロゴ',flight:'便名',gate:'ゲート',remark:'備考'};
- for(const direction of ['departure','arrival'])for(const key of BoardPolicy.columns){const label=document.createElement('label'),box=document.createElement('input'),caption=document.createElement('span');box.type='checkbox';box.value=key;box.checked=true;caption.dataset.managerLabel=labels[key];caption.textContent=mt(labels[key]);label.append(box,caption);$(direction+'Columns').append(label);}
+ const labels={scheduled:'定刻',estimated:'予定時刻',destination:'行先／出発地',airline:'航空会社ロゴ',flight:'便名',gate:'ゲート',belt:'ベルト',remark:'備考'};
+ for(const direction of ['departure','arrival'])for(const key of BoardPolicy.columns.filter(x=>direction==='arrival'||x!=='belt')){const label=document.createElement('label'),box=document.createElement('input'),caption=document.createElement('span');box.type='checkbox';box.value=key;box.checked=key!=='belt';caption.dataset.managerLabel=labels[key];caption.textContent=mt(labels[key]);label.append(box,caption);$(direction+'Columns').append(label);}
  $('terminalUsage').onchange=boardFormVisibility;$('terminalDirection').onchange=boardFormVisibility;boardFormVisibility();
  $('displayForm').addEventListener('reset',()=>queueMicrotask(boardFormVisibility));
  function assetHelp(){$('signageSizeHelp').hidden=$('assetKind').value!=='signage';$('logoSizeHelp').hidden=$('assetKind').value!=='logo';}

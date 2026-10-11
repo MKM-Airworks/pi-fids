@@ -21,3 +21,9 @@ Classification uses the optional geo field from CSV or Web releases: DOM or INTL
 In ① Flight information, edit a flight and enter comma-separated codeshare flight numbers (for example NH6467, PR999). Save and publish the draft. Clear the field, save and publish to remove codeshares while retaining the operating flight.
 
 In ③ Terminal settings, enable/disable Show codeshare flights and set a 3–60 second interval (enabled, 5 seconds by default). The airline logo and flight number rotate together, operating flight first and then codeshares. Time, route, gate and remarks remain unchanged. Language rotation is independent. Registered airline logos are used; missing logos fall back to the registered airline name, or the airline code if no name is registered.
+
+## 到着便のベルト / Arrival baggage belt
+①便の編集でベルト番号（20文字まで）を入力し、公開します。空欄で保存・公開すると削除します。③端末の設定の「到着便の表示列」で「ベルト」を選び保存すると、その端末の横置き・縦置き到着便画面に表示します。既存端末は非表示のままです。
+Edit the baggage belt in Flight information (up to 20 characters), then publish. Clear and publish to remove it. Enable Belt under the terminal's Arrival columns to show it on landscape or portrait arrivals. Existing terminals keep it hidden.
+Web配信契約の任意項目 `belt` を受信します。Web配信サーバーのコード更新は別途必要です。DBテーブル変更は不要です。
+The receiver accepts optional `belt` metadata. The Web distribution server needs a separate code update; no database table migration is needed.

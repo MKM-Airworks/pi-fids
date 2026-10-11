@@ -79,7 +79,7 @@ def import_draft(store,data):
             prior=by_operation.get(operation_key(row),{})
             for key in ('airlineLogo','languages'):
                 if key in prior:row[key]=prior[key]
-            for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','remark','codeshareFlights'):
+            for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','belt','remark','codeshareFlights'):
                 if key in prior and prior[key]!=baseline.get(operation_key(row),{}).get(key):row[key]=prior[key]
         fresh=carryovers(db,airport,existing,day,store.timezone(airport))+fresh
         manual=[r for r in rows if r['id'] not in ids]

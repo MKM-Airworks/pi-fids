@@ -1,6 +1,6 @@
 import json
 import re
-COLUMNS=('scheduled','estimated','destination','airline','flight','gate','remark')
+COLUMNS=('scheduled','estimated','destination','airline','flight','gate','remark','belt')
 
 def validate(data):
     if data is None:return None
@@ -12,8 +12,8 @@ def validate(data):
         if value not in choices:raise ValueError('Invalid '+key+' display setting')
         if key in data:result[key]=value
     for key in ('departureColumns','arrivalColumns'):
-        columns=data.get(key,list(COLUMNS))
-        if not isinstance(columns,list) or not columns or any(x not in COLUMNS for x in columns) or len(set(columns))!=len(columns):
+        columns=data.get(key,list(COLUMNS[:-1]))
+        if not isinstance(columns,list) or not columns or any(x not in COLUMNS or (key=='departureColumns' and x=='belt') for x in columns) or len(set(columns))!=len(columns):
             raise ValueError('Select at least one valid display column')
         result[key]=[x for x in COLUMNS if x in columns]
     logo=data.get('logo','')

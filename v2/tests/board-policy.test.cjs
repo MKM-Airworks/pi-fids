@@ -95,3 +95,5 @@ test('codeshares rotate as one identity at exact interval boundaries without cha
  assert.equal(p.codeshareNumber(f,{},0),'UA142');assert.equal(p.codeshareNumber(f,{},4999),'UA142');assert.equal(p.codeshareNumber(f,{},5000),'NH6467');assert.equal(p.codeshareNumber(f,{},10000),'PR999');assert.equal(p.codeshareNumber(f,{},15000),'UA142');
  assert.equal(p.codeshareNumber(f,{codeshareEnabled:false},5000),'UA142');assert.equal(p.codeshareNumber(f,{codeshareInterval:7},7000),'NH6467');assert.equal(p.codeshareNumber({flightNumber:'BC101'},{},10000),'BC101');assert.equal(JSON.stringify(f),before);
 });
+
+test('belt is optional per arrival terminal and absent on departures',()=>{assert.ok(!p.selectedColumns(null,'arrival').includes('belt'));assert.ok(p.selectedColumns({arrivalColumns:['flight','belt']},'arrival').includes('belt'));assert.ok(!p.selectedColumns({departureColumns:['flight','belt']},'departure').includes('belt'));});

@@ -27,8 +27,8 @@
   return flights.filter(flight=>matches(flight)&&started(flight)&&(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
    .sort((a,b)=>effective(a)-effective(b)||a.flightNumber.localeCompare(b.flightNumber));
  }
- const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];
- function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)):[...columns];}
+ const columns=['scheduled','estimated','destination','airline','flight','gate','remark','belt'];
+ function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)&&(direction==='arrival'||x!=='belt')):columns.filter(x=>x!=='belt');}
  function synchronizedClock(utcNow,wallNow=Date.now(),monotonicNow=0){const epoch=Date.parse(utcNow);if(!Number.isFinite(epoch))throw Error('Invalid clock');return {now:mono=>epoch+mono-monotonicNow,offset:epoch-wallNow};}
  function language(config,now=Date.now()){const languages=config?.languages?.length?config.languages:['en','ja'];const interval=config?.languageInterval||8;return languages[Math.floor(now/1000/interval)%languages.length];}
  function codeshareNumber(flight,config={},now=Date.now()){
