@@ -38,6 +38,8 @@ def expected_schema(directory):
     with store.connect() as db:required=set(schema(db))
     registry.init(store)
     init_tables(store)
+    from .daily import init_tables as init_daily
+    init_daily(store)
     with store.connect() as db:
         return schema(db),required
 

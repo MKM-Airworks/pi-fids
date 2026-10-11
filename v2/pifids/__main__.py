@@ -51,7 +51,9 @@ def handler(store, upstream=None, os_clock=None):
             elif url.path == '/api/upstream':
                 try:
                     query = parse_qs(url.query)
-                    self.send(200, upstream.info(query.get('airport',['SHI'])[0],query.get('serviceDate',[None])[0]) if upstream else {'configured':False})
+                    from .daily import status
+                    airport = query.get('airport',['SHI'])[0]
+                    self.send(200, upstream.info(airport,query.get('serviceDate',[None])[0]) if upstream else {'configured':False,**status(store,airport)})
                 except (ValueError, TypeError, KeyError) as error:
                     self.send(400, {'error':str(error)})
             elif url.path == '/api/feed':
@@ -226,5 +228,7 @@ if __name__ == '__main__':
             except Exception:pass
             threading.Event().wait(60)
     threading.Thread(target=audit_cleanup,name='Audit retention',daemon=True).start()
+    from .daily import DailySchedules
+    DailySchedules(store).start()
     if upstream:upstream.start()
     server.serve_forever()

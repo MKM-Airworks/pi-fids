@@ -156,7 +156,7 @@ def project(body, service_date):
     rows = []
     for flight in body['flights']:
         if flight['validFrom'] <= service_date <= flight['validTo'] and day.isoweekday() in flight['operatingDays']:
-            stable = json.dumps([*(body[key] for key in SCOPE), flight['id']],separators=(',',':'))
+            stable = json.dumps([*(body[key] for key in SCOPE), flight['id'], service_date],separators=(',',':'))
             row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'remark':remark(flight)})
             rows.append({**row, 'id':hashlib.sha256(stable.encode()).hexdigest()[:32]})
     if len(rows) > 100:
@@ -297,18 +297,23 @@ class Upstream:
                 old_ids = set(json.loads(old[0])) if old else set()
                 manual = [row for row in rows if row['id'] not in old_ids]
                 existing = {row['id']:row for row in rows if row['id'] in old_ids}
+                from .daily import carryovers, operation_key
+                carried = carryovers(db,airport,list(existing.values()),service_date,self.store.timezone(airport))
+                by_operation = {operation_key(row):row for row in existing.values()}
+                by_flight = {(row.get('direction','departure'),row['flightNumber']):row for row in existing.values()}
                 baseline = {row['id']:row for row in json.loads(old[2])} if old else {}
                 imported = []
                 for flight in info['flights']:
-                    if any(row.get('direction','departure')==flight['direction'] and row['flightNumber']==flight['flightNumber'] for row in manual):
+                    if any(operation_key(row)==operation_key(flight) for row in manual):
                         raise ValueError('A local flight has the same direction and flight number. Resolve it before importing.')
-                    previous = existing.get(flight['id'],{})
+                    previous = existing.get(flight['id'],by_operation.get(operation_key(flight),by_flight.get((flight['direction'],flight['flightNumber']),{})))
                     extras = {key:previous.get(key,flight.get(key,'')) for key in ('airlineLogo','languages')}
-                    if old and old[1] == service_date:
-                        extras.update({key:previous[key] for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','remark') if key in previous and previous[key]!=baseline.get(flight['id'],{}).get(key)})
+                    if old and old[1] == service_date and previous.get('serviceDate') == service_date:
+                        extras.update({key:previous[key] for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','remark') if key in previous and previous[key]!=baseline.get(previous.get('id'),{}).get(key)})
                     if flight['remark']=='Cancelled':
                         extras['remark']='Cancelled'
                     imported.append({**flight,**extras})
+                imported = carried+imported
                 if len(manual)+len(imported)>100:
                     raise ValueError('Current FIDS limit: 100 flights')
                 db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?',(json.dumps(manual+imported),airport))
@@ -329,7 +334,8 @@ class Upstream:
     def sync_info(self, airport):
         with self.store.connect() as db:
             row=db.execute('SELECT mode,last_publish,last_run,result FROM upstream_sync WHERE airport=?',(airport,)).fetchone()
-        return {'mode':row[0] if row else 'manual','lastPublish':row[1] if row else None,'lastAutoCheck':row[2] if row else None,'autoResult':row[3] if row else None,'pollSeconds':60}
+        from .daily import status
+        return {'mode':row[0] if row else 'manual','lastPublish':row[1] if row else None,'lastAutoCheck':row[2] if row else None,'autoResult':row[3] if row else None,'pollSeconds':60,**status(self.store,airport)}
 
     def set_mode(self, airport, mode):
         self.require_airport(airport)

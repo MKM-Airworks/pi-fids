@@ -59,11 +59,25 @@ python3 -m pifids --auth-config /private/path/manager-auth.json --upstream-confi
 
 運航便なしの明示公開と、運航曜日に該当する便なしは別表示。失効した資格情報・通信障害・破損本文は最後の正常原本と公開表示を保持する。失敗状態と最終取得時刻を管理画面に表示する。空港日付は端末OSのタイムゾーンに依存せずSHI/RORのUTC+09:00を使う。
 
-## 今回の範囲と残作業
+## 日付切替と保存済みダイヤによる自動公開 / Daily publication
 
-手動取得・手動取込み・手動公開の接続を実装した。取得の自動周期、運航日の日次自動展開と公開日制約、Webメインでの自動適用・編集禁止、正本世代の切替、クラウドバックアップは後続実装。未来日の取込みは下書き準備用であり、日付に合わせた自動公開はまだ行わない。公開後に運航日が変わっても表示が自動更新される段階ではない。
+管理PCは空港のタイムゾーンで日付を確認し、現地0時を過ぎた後、通常1分以内に最後に検証・保存したシーズナルダイヤから当日便を生成・公開する。最初の手動取込み・公開後に動作し、運航期間と運航曜日に従う。PCが停止していた場合は起動後に当日分へ追いつく。停止中の各日を順に公開しない。
 
-FIDS側は25件のPythonテストを確認。新WebプロファイルのAPI・資格情報・DBはまだ本番へ設置していない。Macの試験用FastAPI（DBスタブ）→HTTP取得→管理画面から取込み／公開→端末受信→到着STA/ETA表示を確認した。Windows、実PostgreSQL、実HTTPSとWixの検証は残る。
+この処理はWebの受信モードとは独立している。Webを手動のままにしても日次公開は動作する。Web通信・資格情報を使わず保存済み原本を再検証するので、Web未接続や予備PCへのバックアップ復元後でも、有効期間内なら当日便を作れる。シーズナルダイヤを最初から保存していないPCでは生成できない。期限切れ、原本破損、未公開の編集、同日の手入力便との競合、合計100件超過時は公開を変更せず状態を管理画面へ表示する。
+
+前日以前の便は運航日を変えず、表示期限内なら当日便と併せて引き継ぐ。期限は表示と同じく実績時刻（ATD/ATA）を優先し、なければETD/ETA、さらに未設定なら定刻を使う。日付は実績日・予定日を尊重する。複数端末で消去までの時間が異なる場合、管理PCは最も長い期限まで保持し、各端末は自身の設定時刻に消去する。
+
+例：10月11日のBC618（定刻17:10）が10月12日00:30へ遅延した場合、10月12日0時の日次公開にその便を残し、10月12日定刻17:10のBC618も別IDで追加する。出発の消去時間10分なら前日の便は00:40に消える。ATDを00:35に設定して公開すると00:45に消える。翌日までの遅延入力にはETD/ETAと併せて予定日も入力する。同じ運航日のWeb再取込みでも引継ぎ便を保持する。
+
+日次公開は監査ログに `schedule.daily-publish`、更新元「Saved seasonal schedule」として記録する。管理画面に日次更新の説明と、期限切れ・確認が必要な状態を表示する。Webの新しいダイヤを取得する処理は引き続き選択した手動／自動モードに従う。
+
+The management PC publishes today's services from its last verified seasonal release within one minute after airport-local midnight. This works independently of manual/automatic Web retrieval, without network access or Web credentials. After a restart it catches up to the current day. A saved release and an initial import/publication are required; valid dates and operating weekdays apply. Expired or corrupt schedules, pending drafts, same-day manual conflicts and the 100-row limit keep the current publication and require review.
+
+Previous-day flights retain their original service date and their estimated/actual dates, gate and remarks while any display still needs them. Each day's flight has a distinct ID, so a delayed previous-day flight and today's flight with the same flight number coexist. Actual time takes precedence for expiry, followed by estimated and scheduled time. Individual screens continue to hide flights using their own configured retention. Enter the estimated date as well as ETD/ETA for an overnight delay. Daily publications are audited as `schedule.daily-publish` with source `Saved seasonal schedule`.
+
+## 残作業
+
+正本世代による自動切替、クラウドバックアップは未実装。現在の管理PC切替は主系の配信を停止してから予備側へ接続先を変更する手動手順で行う。
 
 ## 配信認証・権限制限の確認記録
 

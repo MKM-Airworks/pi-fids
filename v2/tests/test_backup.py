@@ -65,6 +65,8 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(list(self.service.root.glob('*.pending')),[])
 
     def test_roundtrip_snapshot_users_images_and_live_data_unchanged(self):
+        from pifids.daily import DailySchedules
+        DailySchedules(self.store)
         original=self.store.feed('SHI','counter-01');archive=self.archive()
         self.store.add({'airport':'SHI','flightNumber':'NEW2','destination':'Kobe','time':'11:00'})
         target=self.root/'recovered';summary=inspect_archive(archive,'SHI',target)

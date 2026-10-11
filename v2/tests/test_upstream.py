@@ -84,7 +84,7 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(len(self.store.audit_records('SHI')),count)
 
     def test_duplicate_manual_flight_and_wrong_airport_rejected(self):
-        self.stage();self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','time':'10:30'});before=self.store.read('SHI')
+        self.stage();self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','serviceDate':'2026-10-05','time':'10:30'});before=self.store.read('SHI')
         with self.assertRaises(ValueError):self.upstream.import_draft('SHI','2026-10-05',before['draftRevision'],1)
         self.assertEqual(self.store.read('SHI'),before)
         with self.assertRaises(ValueError):self.upstream.info('ROR')
@@ -146,7 +146,7 @@ class UpstreamTests(unittest.TestCase):
 
     def test_auto_conflict_is_atomic_and_no_flights_publication(self):
         self.stage();self.upstream.set_mode('SHI','auto')
-        self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','time':'10:30'})
+        self.store.add({'airport':'SHI','flightNumber':'BC101','destination':'HND','serviceDate':'2026-10-05','time':'10:30'})
         self.store.publish('SHI');before=self.store.read('SHI')
         with patch.object(self.upstream,'fetch'),patch('pifids.upstream.local_date',return_value=__import__('datetime').date(2026,10,5)):
             self.upstream.auto_step()
