@@ -56,7 +56,7 @@ function render(){
  const fallback=displayConfig.signage?.enabled&&(displayConfig.mode==='board'||displayConfig.airline==='MKM Airworks'&&!displayConfig.image&&!displayConfig.logo||!SignagePolicy.active(displayConfig.signage,fidsNow(),state.timezone));
  const effectiveImage=fallback?(assetUrls[displayConfig.signage.defaultImage]||'/static/branding/mkm-airworks-horizontal.png'):assetUrls[displayConfig.image];
  const mode=fallback?'counter':displayConfig.mode, fullImage=mode!=='board'&&!!effectiveImage;
- const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.dataset.orientation=displayConfig.board?.orientation||'landscape';document.body.classList.toggle('image-only',fullImage);
+ const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.dataset.orientation=displayConfig.board?.orientation||'landscape';document.body.classList.toggle('image-only',fullImage);$('titlePictogram').hidden=mode!=='board';
  const labels=words[settings.language]||words.en;
  const purposes={ja:['チェックイン','搭乗口'],en:['Check-in','Boarding gate'],'zh-Hant':['報到櫃檯','登機口'],'zh-Hans':['值机柜台','登机口'],ko:['체크인','탑승구']};
  const purpose=(purposes[settings.language]||purposes.en)[mode==='counter'?0:1];

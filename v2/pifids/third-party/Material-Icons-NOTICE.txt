@@ -1,0 +1,4 @@
+Google Material Design Icons: flight_takeoff and flight_land
+Source: https://github.com/google/material-design-icons/tree/master/src/action
+License: Apache-2.0 (see Material-Icons-LICENSE.txt).
+Modifications: embedded in templates/display.html, recolored blue/red and framed using CSS.
