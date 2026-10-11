@@ -26,6 +26,7 @@ def parse(text,airport,zone):
         for line,row in enumerate(reader,2):
             if len(flights)>=1000 or None in row or any(value is None for value in row.values()):raise ValueError('Invalid CSV row or too many schedules')
             row={key:value.strip() for key,value in row.items()}
+            if row['geo'] not in ('','DOM','INTL'):raise ValueError('Geo must be DOM or INTL')
             direction={'DEP':'departure','ARR':'arrival'}.get(row['movement'])
             if not direction:raise ValueError('Movement must be DEP or ARR')
             for key in ('origin','destination'):sites.airport_code(row[key])
@@ -42,7 +43,7 @@ def parse(text,airport,zone):
                 first=max(start,date.fromisoformat(prior['validFrom']));last=min(end,date.fromisoformat(prior['validTo']))
                 shared=set(days)&set(prior['operatingDays'])
                 if first<=last and any((first+timedelta(days=i)).isoweekday() in shared for i in range(min(7,(last-first).days+1))):raise ValueError('Overlapping schedules for '+number)
-            flight={'id':'csv-'+hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest()[:32],'flightNumber':number,'airlineCode':row['carrier'],'direction':direction,'origin':row['origin'],'destination':row['destination'],'validFrom':row['validFrom'],'validTo':row['validTo'],'operatingDays':days,'scheduledTime':time,'status':'NA','timeStatus':'','boardingStatus':'','codeshares':row['codeshares']}
+            flight={'id':'csv-'+hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest()[:32],'flightNumber':number,'airlineCode':row['carrier'],'direction':direction,'origin':row['origin'],'destination':row['destination'],'validFrom':row['validFrom'],'validTo':row['validTo'],'operatingDays':days,'scheduledTime':time,'status':'NA','timeStatus':'','boardingStatus':'','codeshares':row['codeshares'],'geo':row['geo']}
             flights.append(flight);groups.setdefault((direction,number),[]).append(flight)
     except (csv.Error,ValueError) as error:raise ValueError('CSV row '+str(reader.line_num)+': '+str(error)) from None
     if not flights:raise ValueError('CSV has no schedules')

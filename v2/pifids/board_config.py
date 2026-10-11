@@ -7,6 +7,10 @@ def validate(data):
     if not isinstance(data,dict) or data.get('direction') not in ('departure','arrival'):
         raise ValueError('Select departure or arrival')
     result={'direction':data['direction']}
+    for key,default,choices in [('traffic','all',('all','domestic','international')),('orientation','landscape',('landscape','portrait'))]:
+        value=data.get(key,default)
+        if value not in choices:raise ValueError('Invalid '+key+' display setting')
+        if key in data:result[key]=value
     for key in ('departureColumns','arrivalColumns'):
         columns=data.get(key,list(COLUMNS))
         if not isinstance(columns,list) or not columns or any(x not in COLUMNS for x in columns) or len(set(columns))!=len(columns):

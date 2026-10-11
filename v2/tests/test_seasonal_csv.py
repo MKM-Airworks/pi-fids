@@ -17,6 +17,7 @@ class CsvTests(unittest.TestCase):
         result=preview(self.store,{**self.data,'csv':'\ufeff'+CSV})
         self.assertEqual(result['scheduleCount'],2)
         self.assertEqual([(r['flightNumber'],r['destination'],r['time']) for r in result['flights']],[('UA157','GUM','00:50'),('UA158','GUM','02:05')])
+        self.assertTrue(all(row['geo']=='INTL' for row in result['flights']))
         self.assertEqual(self.store.read('ROR')['draft'],[])
     def test_wrong_scope_bad_time_days_and_overlap_rejected(self):
         for raw in [CSV.replace(',ROR,',',SHI,'),CSV.replace('02:05','24:05'),CSV.replace('1234567','11'),CSV+CSV.splitlines()[1]+'\n',CSV.replace('2026-10-31','2026-09-30')]:

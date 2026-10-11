@@ -47,3 +47,13 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config['departureShowMinutes'],360);self.assertIsNone(config['arrivalShowMinutes'])
         for value in (-1,10081,True,3.5,'360'):
             with self.assertRaises(ValueError):board_config.validate({'direction':'departure','departureShowMinutes':value})
+
+    def test_portrait_and_traffic_settings_round_trip(self):
+        for direction in ('departure','arrival'):
+            for traffic in ('all','domestic','international'):
+                for orientation in ('landscape','portrait'):
+                    registry.save_terminal(self.store,dict(airport='ROR',displayId='test-screen',name='Test screen',usage='board',board=dict(direction=direction,traffic=traffic,orientation=orientation)))
+                    board=self.store.display('ROR','test-screen')['board']
+                    self.assertEqual((board['direction'],board['traffic'],board['orientation']),(direction,traffic,orientation))
+        for field,value in [('traffic','unknown'),('orientation','rotate'),('traffic',None)]:
+            with self.assertRaises(ValueError):board_config.validate({'direction':'departure',field:value})

@@ -22,7 +22,9 @@
   const value=control[key];const minutes=Number.isInteger(value)&&value>=0&&value<=10080?value:(direction==='arrival'?120:10);
   const opening=control.board?.[direction+'ShowMinutes'];
   const started=flight=>Number.isInteger(opening)?now>=timestamp(flight.serviceDate,flight.time)-opening*minute:flight.serviceDate<=today(now);
-  return flights.filter(flight=>started(flight)&&(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
+  const traffic=control.board?.traffic||'all';
+  const matches=flight=>traffic==='all'||flight.geo===(traffic==='domestic'?'DOM':'INTL');
+  return flights.filter(flight=>matches(flight)&&started(flight)&&(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
    .sort((a,b)=>effective(a)-effective(b)||a.flightNumber.localeCompare(b.flightNumber));
  }
  const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];

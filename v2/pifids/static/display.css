@@ -48,3 +48,17 @@ body[data-view=display]:not(.display-setup) .flight-board td:not([data-column=es
 
 .flight-board td.airline-logo-cell{background:#fff;padding:0 .5vw!important;vertical-align:middle;}
 .flight-board td.airline-logo-cell .flight-logo{width:100%;max-width:none;height:calc(64vh / var(--page-rows,8));max-height:none;object-fit:contain;background:#fff;}
+/* Portrait boards use stacked cards instead of squeezing seven columns. */
+body[data-view=display][data-orientation=portrait]:not(.display-setup) header{min-height:7vh;padding:1vh 3vw;gap:2vw}
+body[data-view=display][data-orientation=portrait]:not(.display-setup) header h1{font-size:clamp(22px,4vw,56px)}
+body[data-view=display][data-orientation=portrait]:not(.display-setup) #clock{font-size:clamp(20px,3.5vw,46px)}
+.portrait-board{height:100%;display:flex;flex-direction:column;background:#080d19}
+.portrait-flight{height:calc(100% / var(--page-rows,6));box-sizing:border-box;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-content:center;gap:.6vh 2vw;padding:1vh 3vw;border-bottom:1px solid #345071}
+.portrait-flight:nth-child(even){background:#183051}
+.portrait-flight div{min-width:0}.portrait-flight small{display:block;font-size:clamp(12px,1.8vw,26px);color:#aec5e6}.portrait-flight strong{display:block;font-size:clamp(20px,3.5vw,48px);font-weight:500;overflow-wrap:anywhere;line-height:1.15}
+.portrait-flight [data-column=destination]{grid-column:span 3}.portrait-flight [data-column=remark]{grid-column:span 3}.portrait-flight [data-column=remark] strong{font-size:clamp(16px,2.8vw,36px)}
+.portrait-flight [data-column=airline]{grid-column:span 2}.portrait-flight [data-column=estimated] strong{color:#ffe17d}.portrait-logo{width:100%;height:4vh;object-fit:contain;background:#fff}
+.portrait-flight{flex:1;min-height:0;height:auto;grid-template-rows:repeat(3,auto);gap:.7vh 2vw}
+.portrait-flight [data-column=scheduled]{grid-area:1 / 1}.portrait-flight [data-column=estimated]{grid-area:1 / 2}.portrait-flight [data-column=flight]{grid-area:1 / 3}.portrait-flight [data-column=gate]{grid-area:1 / 4}
+.portrait-flight [data-column=destination]{grid-area:2 / 1 / 3 / 4}.portrait-flight [data-column=airline]{grid-area:2 / 4 / 3 / 5}.portrait-flight [data-column=remark]{grid-area:3 / 1 / 4 / 5}
+.portrait-flight small{font-size:clamp(12px,1.8vw,24px)}.portrait-flight strong{font-size:clamp(20px,3.5vw,44px)}.portrait-logo{height:3.3vh}.portrait-flight [data-column=airline] strong{font-size:clamp(14px,2.3vw,30px)}

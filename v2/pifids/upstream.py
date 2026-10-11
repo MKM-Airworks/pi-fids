@@ -157,7 +157,7 @@ def project(body, service_date):
     for flight in body['flights']:
         if flight['validFrom'] <= service_date <= flight['validTo'] and day.isoweekday() in flight['operatingDays']:
             stable = json.dumps([*(body[key] for key in SCOPE), flight['id'], service_date],separators=(',',':'))
-            row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'remark':remark(flight)})
+            row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'geo':flight.get('geo',''),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'remark':remark(flight)})
             rows.append({**row, 'id':hashlib.sha256(stable.encode()).hexdigest()[:32]})
     if len(rows) > 100:
         raise ValueError('Current FIDS limit: 100 daily flights')

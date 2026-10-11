@@ -79,3 +79,12 @@ test('ROR next-day departure opens exactly STD minus six hours regardless of del
   assert.equal(p.visible([{...row,direction:'arrival'}],'arrival',{board:{arrivalShowMinutes:360}},now).length,1);
  }finally{p.configureTimezone('Asia/Tokyo');}
 });
+
+test('domestic/international filters preserve direction and time rules and exclude unclassified rows',()=>{
+ const rows=[flight({geo:'DOM',flightNumber:'DOM'}),flight({geo:'INTL',flightNumber:'INTL'}),flight({flightNumber:'UNKNOWN'}),flight({geo:'INTL',direction:'arrival',flightNumber:'ARR'})];
+ const now=t('2026-10-05T08:00:00');
+ assert.deepEqual(p.visible(rows,'departure',{board:{traffic:'domestic'}},now).map(r=>r.flightNumber),['DOM']);
+ assert.deepEqual(p.visible(rows,'departure',{board:{traffic:'international'}},now).map(r=>r.flightNumber),['INTL']);
+ assert.equal(p.visible(rows,'departure',{},now).length,3);
+ assert.deepEqual(p.visible(rows,'arrival',{board:{traffic:'international'}},now).map(r=>r.flightNumber),['ARR']);
+});

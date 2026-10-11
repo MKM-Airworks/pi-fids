@@ -196,6 +196,14 @@
               "final_call",
               "gate_closed"
             ]
+          },
+          "geo": {
+            "type": "string",
+            "enum": [
+              "",
+              "DOM",
+              "INTL"
+            ]
           }
         },
         "required": [
