@@ -19,6 +19,11 @@ from . import signage_config, airline_names, board_config, clock_sync, airport_n
 
 
 class ReceiverStore(Store):
+    def connection_status(self):
+        last=getattr(self,'last_sync_monotonic',None)
+        age=None if last is None else max(0,time.monotonic()-last)
+        return {'online':last is not None and age<20 and not getattr(self,'sync_failed',False),'ageSeconds':age}
+
     def accept(self, airport, display_id, state, control, images):
         if state.get('airport') != airport or control.get('displayId') != display_id:
             raise ValueError('Receiver identity mismatch')
@@ -101,6 +106,8 @@ def sync_once(store, source, airport, display_id, token=None):
                 images[digest] = fetch('/asset', {'airport':airport, 'displayId':display_id, 'id':digest}, 2*1024*1024)
     if clock_delta is not None:state['clock']['utcNow']=datetime.fromtimestamp(time.time()+clock_delta,timezone.utc).isoformat()
     store.accept(airport, display_id, state, control, images)
+    store.last_sync_monotonic=time.monotonic()
+    store.sync_failed=False
 
 
 def receiver_handler(store):
@@ -109,6 +116,7 @@ def receiver_handler(store):
             self.send(403, {'error':'Display receiver is read-only'})
 
         def do_GET(self):
+            if urlparse(self.path).path=='/api/receiver-status':return self.send(200,store.connection_status())
             if urlparse(self.path).path in ('/', '/api/registry'):
                 return self.send(404, {'error':'Display receiver has no manager UI'})
             return super().do_GET()
@@ -150,6 +158,7 @@ def main():
             try:
                 sync_once(store,args.source,args.airport,args.display_id,token)
             except Exception as error:
+                store.sync_failed=True
                 logging.warning('Sync failed; keeping disk snapshot: %s', type(error).__name__)
             time.sleep(5)
     # Edge requests several shell/image resources concurrently at startup.
