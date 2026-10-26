@@ -8,6 +8,22 @@
 
 旧未署名EXE方式は廃止しました。ZIP方式でもWindowsの実行制限が適用される場合があります。保護設定を変更せず、ブロック内容を確認してください。新規PCでの一括導入・再起動検収は未完了です。
 
+## 古いWindows PCの起動待ち / Slow Windows startup
+
+表示の起動処理は、受信アプリが対象端末のデータをHTTPで返すまで待機し続けます。上流の通信が切れていても、保存済みデータで表示できます。Edgeのウィンドウが開くまで確認し、起動失敗時も同じ専用プロファイルで再試行します。タスクに起動待ちの時間制限は設けません。個人用Edgeを終了する処理はありません。ログは表示アプリ保存先の `display-startup.log` に記録し、1MBを超えると1世代保管します。
+
+The startup worker waits for the local receiver's HTTP responses and terminal identity, including on slow cold boots. Upstream connectivity is not required for cached display. It verifies that the dedicated Edge kiosk window opens and retries failed launches with the same profile. Startup tasks have no elapsed-time limit. See `display-startup.log` in the display directory (1MB, one rotated copy).
+
+導入アカウントでWindowsへログインする必要があります。表示後にAlt+F4で終了した場合は、意図した操作として扱い、この起動処理は再表示しません。
+
+Windows sign-in with the installation account is required. This is a startup worker, not a permanent browser watchdog: Alt+F4 does not automatically reopen a successfully started kiosk.
+
+接続確認だけなら導入先で `powershell -NoProfile -File .\Open-Display.ps1 -CheckOnly` を実行します。受信準備完了まで待ち、ブラウザーは開きません。
+
+既存端末は新規インストーラーを再実行せず、更新パッケージ内の `Update-DisplayStartup.ps1` を、元の導入アカウントで実行します。起動スクリプトと画面起動タスクだけを更新し、元のファイルとタスクXMLを `startup-backup-日時` へ退避します。接続キー・便・画像・受信DBは変更しません。旧試験用 `PiFidsV2-Test` とZIP導入版 `PiFidsDisplay` に対応し、複数の導入先があれば `-Root` を明示します。更新前の確認には `-CheckOnly` を指定します。
+
+For an existing display, run `Update-DisplayStartup.ps1` from the update package under the original installation account. It backs up and updates only the startup scripts and screen task. Connection credentials and operational data are preserved. Both legacy test and ZIP-installed displays are supported. Use `-Root` if more than one installation exists, or `-CheckOnly` to validate without changing the installation.
+
 ## 配布ZIPの作成
 
 Windows用の検証済みPythonランタイムZIP（`runtime/` 配下のみ）と、tzdataを導入したビルド環境を用意します。
