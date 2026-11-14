@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: pi-fids-ror-demo
+    runtime: python
+    plan: starter
+    buildCommand: python -m compileall -q demo.py pifids
+    startCommand: python demo.py
+    healthCheckPath: /healthz
+    numInstances: 1
+    disk:
+      name: ror-demo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DEMO_DATA_DIR
+        value: /var/data/pi-fids-ror-demo
+      - key: DEMO_ORIGIN
+        sync: false
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_DISPLAY_TOKEN
+        sync: false
+      - key: ROR_FDD_ORIGIN
+        sync: false
+      - key: ROR_FDD_ORG_ID
+        sync: false
+      - key: ROR_FDD_AIRPORT_ID
+        sync: false
+      - key: ROR_FDD_TOKEN
+        sync: false

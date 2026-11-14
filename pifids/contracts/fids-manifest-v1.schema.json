@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mkm:fids-distribution:manifest:1",
+  "title": "MKM FIDS Distribution manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "product",
+    "organizationId",
+    "airportId",
+    "stationAirport",
+    "timezone",
+    "releaseId",
+    "dataVersion",
+    "publishedAt",
+    "preview",
+    "coverage",
+    "localDate",
+    "status",
+    "activeScheduleCount",
+    "sha256",
+    "byteLength",
+    "dataPath"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "mkm-fids-distribution/1"
+    },
+    "product": {
+      "const": "pi-fids"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "airportId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "stationAirport": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1
+    },
+    "releaseId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dataVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "preview": {
+      "type": "boolean"
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "localDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "enum": [
+        "available",
+        "no_flights",
+        "not_yet_effective",
+        "expired",
+        "no_active_schedules"
+      ]
+    },
+    "activeScheduleCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "byteLength": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4194304
+    },
+    "dataPath": {
+      "type": "string",
+      "pattern": "^/v1/fids-receiver/releases/[a-f0-9-]{36}$"
+    }
+  }
+}

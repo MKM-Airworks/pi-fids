@@ -1,0 +1,10 @@
+Skymark assets / スカイマーク素材（2026-10-09）
+Official website logo / 公式サイトの原本:
+https://www.skymark.co.jp/ja/common/images/logo_header_01.png
+High-resolution vector / 高解像度ベクター版:
+https://commons.wikimedia.org/wiki/File:Skymark_Airlines_Logo.svg
+Skymark Airlines, vectorized by Chihaya Sta. Commons labels this PD-textlogo; trademark remains Skymark's.
+PNG rendered from the vector without changing the logo design.
+チェックイン・ゲート画面はPi-FIDS試験用に作成した画面です。航空会社が配布した公式案内画面ではありません。
+Check-in and gate artwork was created for Pi-FIDS testing, not supplied or approved by the airline.
+1920 x 1080 PNG. Includes Japanese and English labels and TEST DISPLAY footer.
