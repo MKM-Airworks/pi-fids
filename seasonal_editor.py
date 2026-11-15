@@ -48,7 +48,7 @@ class SeasonalEditor:
             if conflict:
                 conflicts.append(flight['id'])
             flights.append({**flight, **changes})
-        conflicts.extend(edits)
+        conflicts.extend(key for key, (_base, changes) in edits.items() if changes)
         if strict and conflicts:
             raise DraftConflict('配信元の変更と競合しています。管理者がシーズンダイヤを確認してください。')
         return {**body, 'flights': flights}, conflicts

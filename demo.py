@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from pifids.daily import DailySchedules
+from pifids.seasonal_csv import template as seasonal_csv_template
 from pifids.downloads import display_package, serve_display_download
 from pifids.lan import manager_handler, feed_handler
 from pifids.security import Security, password_hash, write_private
@@ -75,20 +76,37 @@ def build(*, start_daily=False):
             path = urlsplit(self.path).path
             if serve_display_download(self, path, package):
                 return
+            if path == '/downloads/seasonal-schedule-template.csv':
+                if not security.session(self.headers):
+                    return self.send(401,{'error':'Please sign in'})
+                body = seasonal_csv_template()
+                self.send_response(200)
+                self.send_header('Content-Type','text/csv; charset=utf-8')
+                self.send_header('Content-Disposition','attachment; filename="Pi-FIDS-Seasonal-Schedule.csv"')
+                self.send_header('Content-Length',str(len(body)))
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if path == '/static/demo-seasonal.js':
                 return self.send(200,(ROOT/'demo-seasonal.js').read_bytes(),'text/javascript; charset=utf-8')
-            if path in ('/', '/api/demo-seasonal'):
+            if path == '/' and security.session(self.headers):
                 identity = security.identity(self.headers)
+                html = (ROOT/'pifids/templates/manager.html').read_text()
+                anchor = '<div id="seasonalCsvPreview">'
+                link = '<p><a href="/downloads/seasonal-schedule-template.csv">CSVテンプレートをダウンロード / Download CSV template</a></p>'
+                html = html.replace(anchor, link + anchor, 1)
                 if identity and identity['role']=='admin':
-                    if path == '/':
-                        html = (ROOT/'pifids/templates/manager.html').read_bytes()
-                        return self.send(200,html.replace(b'</body>',b'<script src="/static/demo-seasonal.js"></script></body>'),'text/html; charset=utf-8')
-                    try:
-                        return self.send(200,editor.listing())
-                    except ValueError as error:
-                        return self.send(400,{'error':str(error)})
-                if path != '/':
+                    html = html.replace('</body>','<script src="/static/demo-seasonal.js"></script></body>')
+                return self.send(200,html.encode(),'text/html; charset=utf-8')
+            if path == '/api/demo-seasonal':
+                identity = security.identity(self.headers)
+                if not identity or identity['role']!='admin':
                     return self.send(403,{'error':'Administrator required'})
+                try:
+                    return self.send(200,editor.listing())
+                except ValueError as error:
+                    return self.send(400,{'error':str(error)})
             if path == '/healthz':
                 return self.send(200, {'ok':True})
             if path in ('/api/feed','/asset') and self.headers.get('Authorization') is not None:
