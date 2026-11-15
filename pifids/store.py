@@ -49,7 +49,7 @@ def validate(data, zone='Asia/Tokyo'):
     if direction not in ('departure', 'arrival'):
         raise ValueError('Invalid flight direction')
     extra = {}
-    for key, limit in (('estimatedTime', 5), ('actualTime', 5), ('gate', 20), ('remark', 100)):
+    for key, limit in (('estimatedTime', 5), ('actualTime', 5), ('gate', 20), ('belt', 20), ('remark', 100)):
         value = data.get(key, '')
         if not isinstance(value, str) or len(value) > limit:
             raise ValueError('Invalid ' + key)

@@ -19,13 +19,13 @@ const boardWords={ja:['定刻','予定','行先／経由','航空会社','便名
 function table(rows,display=false,draft=false){
  const board=document.createElement('table'), head=board.createTHead().insertRow();
  const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,7);
- if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
+ if(arrival){labels[5]=({ja:'手荷物ベルト',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt';labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
  const columns=display?boardColumns():null;
  for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','備考','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
  const body=board.createTBody();
  for(const flight of rows){
   const row=body.insertRow();const langs=display?[settings.language]:[];row.lang=settings.language;
-  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(flight.flightNumber,row.lang),flight.flightNumber,flight.gate||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',mt('端末ごとに設定')];
+  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(flight.flightNumber,row.lang),flight.flightNumber,(arrival?flight.belt:flight.gate)||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',mt('端末ごとに設定')];
   const shown=display?columns.map(key=>values[BoardPolicy.columns.indexOf(key)]):values;
   for(const value of shown){const cell=row.insertCell();cell.textContent=value;}
   if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
