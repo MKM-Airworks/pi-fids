@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from pifids.downloads import display_package, serve_display_download
 from pifids.lan import manager_handler, feed_handler
 from pifids.security import Security, password_hash, write_private
 from pifids.store import Store
@@ -47,6 +48,7 @@ def build():
                                              airportId=os.environ['ROR_FDD_AIRPORT_ID'],
                                              product='pi-fids',stationAirport=AIRPORT,timezone=ZONE)))
     upstream = Upstream(store, config)
+    package = display_package(ROOT / "dist")
     artwork = {}
     for mode, filename in [('counter','skymark-checkin-test.png'),('gate','skymark-gate-test.png')]:
         artwork[mode] = store.upload_asset(dict(airport=AIRPORT,name=filename,kind='signage',
@@ -68,6 +70,8 @@ def build():
 
         def do_GET(self):
             path = urlsplit(self.path).path
+            if serve_display_download(self, path, package):
+                return
             if path == '/healthz':
                 return self.send(200, {'ok':True})
             if path in ('/api/feed','/asset') and self.headers.get('Authorization') is not None:

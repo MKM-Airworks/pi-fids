@@ -3,7 +3,7 @@ services:
     name: pi-fids-ror-demo
     runtime: python
     plan: starter
-    buildCommand: python -m compileall -q demo.py pifids
+    buildCommand: pip install -r windows/requirements.txt && python windows/build.py && python -m compileall -q demo.py pifids
     startCommand: python demo.py
     healthCheckPath: /healthz
     numInstances: 1
