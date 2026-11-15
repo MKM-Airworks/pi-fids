@@ -49,4 +49,7 @@ body[data-view=display]:not(.display-setup) .flight-board td:not([data-column=es
 .flight-board td.airline-logo-cell{background:#fff;padding:0 .5vw!important;vertical-align:middle;}
 .flight-board td.airline-logo-cell .flight-logo{width:100%;max-width:none;height:calc(64vh / var(--page-rows,8));max-height:none;object-fit:contain;background:#fff;}
 
-#displayFooter .footer-date{display:flex;align-items:center;gap:1em;white-space:nowrap}
+#displayFooter .footer-date{display:flex;align-items:center;gap:1.2em;white-space:nowrap}
+#displayConnection{font-weight:600;white-space:nowrap}
+#displayConnection.on-line{color:#80ef9d}
+#displayConnection.off-line{color:#ffdc65}
