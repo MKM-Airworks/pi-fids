@@ -9,3 +9,10 @@ Sign in as demo-admin. In the flight management screen select an operating date 
 For a demo display PC, use the existing HTTPS receiver with a locally created private connection.json containing source (DEMO_ORIGIN), airport (ROR), timezone (Pacific/Palau), displayId (ror-demo) and token (DEMO_DISPLAY_TOKEN). Use a distinct receiver database and browser profile; the receiver listens on localhost and Edge Kiosk opens its local /display?airport=ROR&displayId=ror-demo&kiosk=1. Never transfer ROR_FDD_TOKEN to the display PC.
 
 Render readiness endpoint: /healthz. Writes require a matching HTTPS Origin and an authenticated manager, except login. Setup, Windows clock changes and automatic upstream mode are disabled. The terminal token only grants the published feed and its referenced assets. Keep this service and its credentials separate from the Windows deployment.
+
+## Render acceptance record — 2026-11-15
+
+- Runtime: demo commit `8f2f8a2`, based on Windows V2 `b01ef1c`.
+- ROR publication version 3: imported and published HB8235 and HB8236 for 2026-11-16. Verified departures, check-in and boarding gate on the demo. The check-in and gate previews were reloaded to verify the selected artwork.
+- On the previous demo runtime `e0cc14f`, Chrome network emulation showed yellow Off-Line while HB8235 remained visible, then green On-Line after restoring the network without reloading.
+- On the synchronized runtime, edited HB8235 to baggage belt 1 and published the demo draft. The Japanese arrivals preview showed 1 under 手荷物受取. The separate `ror-arrival-preview` terminal uses an arrival display lead time of 2040 minutes to show the next-day flight during verification.
