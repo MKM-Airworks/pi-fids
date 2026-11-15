@@ -19,7 +19,7 @@ const boardWords={ja:['定刻','予定','行先／経由','航空会社','便名
 function table(rows,display=false,draft=false){
  const board=document.createElement('table'), head=board.createTHead().insertRow();
  const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,7);
- if(arrival){labels[5]=({ja:'手荷物ベルト',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt';labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
+ if(arrival){labels[5]=({ja:'手荷物受取',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt';labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
  const columns=display?boardColumns():null;
  for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','備考','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
  const body=board.createTBody();
