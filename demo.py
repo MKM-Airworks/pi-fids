@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from pifids.daily import DailySchedules
 from pifids.downloads import display_package, serve_display_download
 from pifids.lan import manager_handler, feed_handler
 from pifids.security import Security, password_hash, write_private
@@ -18,7 +19,7 @@ AIRPORT, ZONE, DISPLAY = 'ROR', 'Pacific/Palau', 'ror-demo'
 ROOT = Path(__file__).resolve().parent
 
 
-def build():
+def build(*, start_daily=False):
     origin = os.environ['DEMO_ORIGIN'].rstrip('/')
     parsed = urlsplit(origin)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username
@@ -109,8 +110,10 @@ def build():
             return super().do_POST()
 
     terminal = feed_handler(store, security)
+    if start_daily:
+        DailySchedules(store).start()
     return Demo
 
 
 if __name__ == '__main__':
-    ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('PORT','10000'))), build()).serve_forever()
+    ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('PORT','10000'))), build(start_daily=True)).serve_forever()
