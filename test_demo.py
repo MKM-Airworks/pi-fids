@@ -1,5 +1,5 @@
 import hashlib, http.client, json, os, tempfile, threading, unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -8,9 +8,10 @@ import demo
 class TestDemo(unittest.TestCase):
  def test_import_and_switch(self):
     day=datetime.now(ZoneInfo(demo.ZONE)).date().isoformat()
+    tomorrow=(datetime.fromisoformat(day)+timedelta(days=1)).date().isoformat()
     scope=dict(organizationId='00000000-0000-4000-8000-000000000001',airportId='00000000-0000-4000-8000-000000000002',product='pi-fids',stationAirport='ROR',timezone=demo.ZONE)
-    identity=dict(scope,schemaVersion='mkm-fids-distribution/1',releaseId='00000000-0000-4000-8000-000000000003',dataVersion=1,publishedAt=day+'T00:00:00Z',preview=False,coverage={'from':day,'to':day})
-    raw=json.dumps(dict(identity,declaration='schedules',flights=[dict(id='demo',flightNumber='ZZ123',airlineCode='ZZ',origin='ROR',destination='GUM',journeyType='international',validFrom=day,validTo=day,operatingDays=list(range(1,8)),status='NA',codeshareFlights=[],direction='departure',scheduledTime='23:59',estimatedTime='',gate='1',timeStatus='',boardingStatus='')])).encode()
+    identity=dict(scope,schemaVersion='mkm-fids-distribution/1',releaseId='00000000-0000-4000-8000-000000000003',dataVersion=1,publishedAt=day+'T00:00:00Z',preview=False,coverage={'from':day,'to':tomorrow})
+    raw=json.dumps(dict(identity,declaration='schedules',flights=[dict(id='demo',flightNumber='ZZ123',airlineCode='ZZ',origin='ROR',destination='GUM',journeyType='international',validFrom=day,validTo=tomorrow,operatingDays=list(range(1,8)),status='NA',codeshareFlights=[],direction='departure',scheduledTime='23:59',estimatedTime='',gate='1',timeStatus='',boardingStatus='')])).encode()
     path='/v1/fids-receiver/releases/'+identity['releaseId']
     manifest=dict(identity,localDate=day,status='available',activeScheduleCount=1,sha256=hashlib.sha256(raw).hexdigest(),byteLength=len(raw),dataPath=path)
     upstream_token='U'*40
@@ -49,6 +50,23 @@ class TestDemo(unittest.TestCase):
                 for endpoint,data in [('check',dict(airport='ROR')),('import',dict(airport='ROR',serviceDate=day,expectedDraftRevision=0,webVersion=1))]:
                     r=req('/api/upstream/'+endpoint,data,**auth);self.assertEqual(r[0],200,r)
                 self.assertEqual(req('/api/publish',dict(airport='ROR'),**auth)[0],200)
+                code, raw_schedule, _ = req('/api/demo-seasonal', **auth)
+                self.assertEqual(code, 200, raw_schedule)
+                self.assertIn(b'demo-seasonal.js', req('/', **auth)[1])
+                schedule = json.loads(raw_schedule)
+                from seasonal_editor import FIELDS
+                fields = {key:schedule['flights'][0][key] for key in FIELDS}
+                fields['scheduledTime'] = '20:00'
+                edit = dict(id='demo', revision=schedule['revision'], fields=fields, serviceDate=tomorrow)
+                self.assertEqual(req('/api/demo-seasonal/save', edit)[0], 403)
+                code, body, _ = req('/api/demo-seasonal/preview', edit, **auth)
+                self.assertEqual(code, 200, body)
+                self.assertEqual(json.loads(body)['flights'][0]['time'], '20:00')
+                self.assertEqual(req('/api/demo-seasonal/save', edit, **auth)[0], 200)
+                self.assertEqual(req('/api/demo-seasonal/save', edit, **auth)[0], 409)
+                self.assertIn(b'schedule.seasonal-edit', req('/api/audit?airport=ROR', **auth)[1])
+                self.assertEqual(json.loads(req('/api/state?airport=ROR', **auth)[1])['flights'][0]['time'], '23:59')
+                self.assertEqual(req('/api/upstream/mode', {'airport':'ROR','mode':'auto'}, **auth)[0], 403)
                 terminal={'Authorization':'Bearer '+'D'*40}
                 query='?airport=ROR&displayId=ror-demo'
                 for mode in ('board','counter','gate','board'):
@@ -60,5 +78,20 @@ class TestDemo(unittest.TestCase):
                     if mode!='board':self.assertEqual(req('/asset'+query+'&id='+feed['control']['image'],**terminal)[0],200)
                 self.assertEqual(req('/api/feed?airport=SHI&displayId=ror-demo',**terminal)[0],403)
                 self.assertEqual(req('/api/publish',dict(airport='ROR'),**terminal)[0],401)
+                from pifids.daily import DailySchedules
+                from pifids.store import Store
+                from pifids.upstream import Upstream
+                from seasonal_editor import SeasonalEditor
+                from pathlib import Path
+                store = Store(str(Path(tmp) / 'demo.sqlite'))
+                store.installed_airport = 'ROR'
+                editor = SeasonalEditor(store, 'ROR', Upstream(store, Path(tmp) / 'fdd.json'))
+                rollover = DailySchedules(store, editor.for_rollover)
+                rollover.step(datetime.fromisoformat(day+'T23:59:00').replace(tzinfo=ZoneInfo(demo.ZONE)))
+                self.assertEqual(store.read('ROR')['flights'][0]['time'], '23:59')
+                rollover.step(datetime.fromisoformat(tomorrow+'T00:00:00').replace(tzinfo=ZoneInfo(demo.ZONE)))
+                self.assertTrue(any(row['time']=='20:00' and row['serviceDate']==tomorrow
+                                    for row in store.read('ROR')['flights']))
+
             finally:s.shutdown()
       finally:f.shutdown()

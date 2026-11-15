@@ -53,8 +53,9 @@ def carryovers(db, airport, flights, service_date, zone, now=None):
 
 
 class DailySchedules:
-    def __init__(self, store):
+    def __init__(self, store, seasonal_overlay=None):
         self.store = store
+        self.seasonal_overlay = seasonal_overlay
         init_tables(store)
 
     def step(self, now=None):
@@ -108,11 +109,12 @@ class DailySchedules:
                                 ids = set(json.loads(previous[0]))
                                 imported = [row for row in old if row['id'] in ids]
                                 manual = [row for row in old if row['id'] not in ids]
-                                today = project(body,day)
+                                schedule = self.seasonal_overlay(db,body,day,csv_cache) if self.seasonal_overlay else body
+                                today = project(schedule,day)
                                 for offset in range(1,(lookahead+1439)//1440+1):
                                     future=(local.date()+timedelta(days=offset)).isoformat()
                                     if future>body['coverage']['to']:break
-                                    for row in project(body,future):
+                                    for row in project(schedule,future):
                                         start=datetime.fromisoformat(future+'T'+row['time']).replace(tzinfo=ZoneInfo(zone))
                                         if local.timestamp()>=start.timestamp()-windows[row['direction']]*60:today.append(row)
                                 fresh_baseline=json.loads(json.dumps(today))
@@ -123,7 +125,12 @@ class DailySchedules:
                                     for key in ('airlineLogo','languages'):
                                         if key in settings:row[key] = settings[key]
                                     existing=old_by_operation.get(operation_key(row))
-                                    if existing:row.update(existing)
+                                    if existing:
+                                        if self.seasonal_overlay and row['serviceDate']==day and previous[1]<day:
+                                            fields=('estimatedTime','estimatedDate','actualTime','actualDate','gate','belt','remark','airlineLogo','languages')
+                                            row.update({key:existing[key] for key in fields if key in existing})
+                                        else:
+                                            row.update(existing)
                                 kept = carryovers(db,airport,imported,day,zone,local)
                                 if {operation_key(row) for row in manual} & {operation_key(row) for row in today}:
                                     raise DraftConflict('A manual flight conflicts with today\'s schedule')

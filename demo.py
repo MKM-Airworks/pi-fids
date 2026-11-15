@@ -12,7 +12,8 @@ from pifids.daily import DailySchedules
 from pifids.downloads import display_package, serve_display_download
 from pifids.lan import manager_handler, feed_handler
 from pifids.security import Security, password_hash, write_private
-from pifids.store import Store
+from pifids.store import Store, DraftConflict
+from seasonal_editor import SeasonalEditor
 from pifids.upstream import Upstream
 
 AIRPORT, ZONE, DISPLAY = 'ROR', 'Pacific/Palau', 'ror-demo'
@@ -49,6 +50,7 @@ def build(*, start_daily=False):
                                              airportId=os.environ['ROR_FDD_AIRPORT_ID'],
                                              product='pi-fids',stationAirport=AIRPORT,timezone=ZONE)))
     upstream = Upstream(store, config)
+    editor = SeasonalEditor(store, AIRPORT, upstream)
     package = display_package(ROOT / "dist")
     artwork = {}
     for mode, filename in [('counter','skymark-checkin-test.png'),('gate','skymark-gate-test.png')]:
@@ -73,6 +75,20 @@ def build(*, start_daily=False):
             path = urlsplit(self.path).path
             if serve_display_download(self, path, package):
                 return
+            if path == '/static/demo-seasonal.js':
+                return self.send(200,(ROOT/'demo-seasonal.js').read_bytes(),'text/javascript; charset=utf-8')
+            if path in ('/', '/api/demo-seasonal'):
+                identity = security.identity(self.headers)
+                if identity and identity['role']=='admin':
+                    if path == '/':
+                        html = (ROOT/'pifids/templates/manager.html').read_bytes()
+                        return self.send(200,html.replace(b'</body>',b'<script src="/static/demo-seasonal.js"></script></body>'),'text/html; charset=utf-8')
+                    try:
+                        return self.send(200,editor.listing())
+                    except ValueError as error:
+                        return self.send(400,{'error':str(error)})
+                if path != '/':
+                    return self.send(403,{'error':'Administrator required'})
             if path == '/healthz':
                 return self.send(200, {'ok':True})
             if path in ('/api/feed','/asset') and self.headers.get('Authorization') is not None:
@@ -88,6 +104,23 @@ def build(*, start_daily=False):
                 return self.send(403, {'error':'Invalid origin'})
             if self.path in ('/api/setup-admin','/api/upstream/mode','/api/clock'):
                 return self.send(403, {'error':'Unavailable in the Render demo'})
+            if self.path in ('/api/demo-seasonal/preview', '/api/demo-seasonal/save'):
+                identity = security.identity(self.headers)
+                if not identity or identity['role']!='admin':
+                    return self.send(403,{'error':'Administrator required'})
+                try:
+                    size = int(self.headers.get('Content-Length','0'))
+                    if not 0 < size <= 8192 or self.headers.get('Content-Type') != 'application/json':
+                        raise ValueError('Invalid request')
+                    data = json.loads(self.rfile.read(size))
+                    if not isinstance(data,dict):
+                        raise ValueError('Invalid request')
+                    with store.as_actor(identity):
+                        return self.send(200,editor.change(data,save=self.path.endswith('/save')))
+                except DraftConflict as error:
+                    return self.send(409,{'error':str(error)})
+                except (ValueError, KeyError, TypeError) as error:
+                    return self.send(400,{'error':str(error)})
             if self.path == '/api/demo-mode':
                 identity = security.identity(self.headers)
                 if not identity or identity['role']!='admin':
@@ -111,7 +144,7 @@ def build(*, start_daily=False):
 
     terminal = feed_handler(store, security)
     if start_daily:
-        DailySchedules(store).start()
+        DailySchedules(store,editor.for_rollover).start()
     return Demo
 
 
