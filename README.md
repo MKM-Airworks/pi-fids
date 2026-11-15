@@ -1,6 +1,6 @@
 # Pi-FIDS V2 — ROR Render demo
 
-Separate Linux demo only. Do not deploy this as a Windows update, reuse production credentials, or point production displays at it. Uses the bundled 2026-10-09 Pi-FIDS distribution code, with a demo-specific entry point and UI. No Windows installation files are included.
+Separate Linux demo only. Do not deploy this as a Windows update, reuse production credentials, or point production displays at it. Uses the Pi-FIDS V2 application from Windows branch develop/v2 at b01ef1c, with a demo-specific entry point and controls. The default demo arrivals board shows baggage belt instead of gate. No Windows installation files are included.
 
 Create a separate Render Blueprint from this directory as the repository root. It requests a paid single-instance Python web service and a dedicated persistent disk. Set DEMO_ORIGIN to the final HTTPS service origin; set a demo-admin password of at least 12 characters and a distinct random URL-safe display token (32–128 characters). Configure ROR_FDD_ORIGIN and the ROR organization/airport UUIDs. Set ROR_FDD_TOKEN to a separately issued, ROR-only, pi-fids read-only token. Enter secrets in Render; do not commit them. Production schedules are fetched read-only; preview releases are rejected.
 

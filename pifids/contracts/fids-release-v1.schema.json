@@ -197,6 +197,14 @@
               "gate_closed"
             ]
           },
+          "geo": {
+            "type": "string",
+            "enum": [
+              "",
+              "DOM",
+              "INTL"
+            ]
+          },
           "belt": {
             "type": "string",
             "maxLength": 20

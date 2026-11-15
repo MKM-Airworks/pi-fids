@@ -29,6 +29,8 @@ def listing(store,airport):
         control=store.display(airport,terminal['displayId'])
         terminal['signage']=control['signage']
         terminal['direction']=(control.get('board') or {}).get('direction','departure')
+        for key in ('traffic','orientation'):
+            if key in (control.get('board') or {}):terminal[key]=control['board'][key]
         terminal['currentDisplay']=terminal['profileName'] or (control['airline'] if control['mode']!='board' else '')
     return dict(terminals=terminals,profiles=profiles)
 

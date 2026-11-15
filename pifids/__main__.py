@@ -29,6 +29,11 @@ def handler(store, upstream=None, os_clock=None):
             files = {'/static/manager.css': ('static/manager.css', 'text/css'), '/static/board-policy.js': ('static/board-policy.js', 'text/javascript'), '/': ('templates/manager.html', 'text/html'), '/display': ('templates/display.html', 'text/html'), '/static/app.js': ('static/app.js', 'text/javascript'), '/sw.js': ('static/sw.js', 'text/javascript'), '/static/manager-i18n.js': ('static/manager-i18n.js', 'text/javascript'), '/static/display.css': ('static/display.css', 'text/css'), '/static/style.css': ('static/style.css', 'text/css')}
             files['/static/signage-policy.js'] = ('static/signage-policy.js','text/javascript')
             files['/static/airport-names.js'] = ('static/airport-names.js', 'text/javascript')
+            files['/backup-guide'] = ('templates/backup-guide.html','text/html')
+            files['/static/manager-feedback.js'] = ('static/manager-feedback.js','text/javascript')
+            files['/static/asset-browser.js'] = ('static/asset-browser.js','text/javascript')
+            files['/static/terminal-connections.js'] = ('static/terminal-connections.js','text/javascript')
+            files['/static/backups.js'] = ('static/backups.js','text/javascript')
             files['/static/users-audit.js'] = ('static/users-audit.js','text/javascript')
             files['/static/login.js'] = ('static/login.js', 'text/javascript')
             files['/static/login.css'] = ('static/login.css', 'text/css')
@@ -49,7 +54,9 @@ def handler(store, upstream=None, os_clock=None):
             elif url.path == '/api/upstream':
                 try:
                     query = parse_qs(url.query)
-                    self.send(200, upstream.info(query.get('airport',['SHI'])[0],query.get('serviceDate',[None])[0]) if upstream else {'configured':False})
+                    from .daily import status
+                    airport = query.get('airport',['SHI'])[0]
+                    self.send(200, upstream.info(airport,query.get('serviceDate',[None])[0]) if upstream else {'configured':False,**status(store,airport)})
                 except (ValueError, TypeError, KeyError) as error:
                     self.send(400, {'error':str(error)})
             elif url.path == '/api/feed':
@@ -63,6 +70,10 @@ def handler(store, upstream=None, os_clock=None):
                     self.send(200, {**store.read(parse_qs(url.query).get('airport', ['SHI'])[0]),'clock':store.clock()})
                 except ValueError as error:
                     self.send(400, {'error': str(error)})
+            elif url.path == '/api/assets/catalog':
+                from .asset_catalog import catalog
+                try:self.send(200,catalog(store,parse_qs(url.query).get('airport',['SHI'])[0]))
+                except ValueError as error:self.send(400,{'error':str(error)})
             elif url.path in ('/api/assets', '/asset'):
                 try:
                     query = parse_qs(url.query)
@@ -105,9 +116,15 @@ def handler(store, upstream=None, os_clock=None):
                 return self.send(403, {'error': 'Invalid origin'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= (3 * 1024 * 1024 if self.path == '/api/assets' else 16384):
+                if not 0 < size <= (3 * 1024 * 1024 if self.path == '/api/assets' else 262144 if self.path.startswith('/api/schedules/csv/') else 16384):
                     raise ValueError('Invalid request size')
                 data = json.loads(self.rfile.read(size))
+                if self.path in ('/api/schedules/csv/preview','/api/schedules/csv/import'):
+                    from .seasonal_csv import preview, import_draft
+                    return self.send(200,(preview if self.path.endswith('/preview') else import_draft)(store,data))
+                if self.path == '/api/assets/delete':
+                    from .asset_catalog import delete
+                    return self.send(200,delete(store,data))
                 if self.path == '/api/assets':
                     return self.send(200, {'digest': store.upload_asset(data)})
                 if self.path == '/api/airline-names':
@@ -166,11 +183,15 @@ if __name__ == '__main__':
     parser.add_argument('--site-config', help='Installation airport and IANA timezone JSON')
     parser.add_argument('--feed-config', help='Read-only LAN credentials without changing localhost management login')
     parser.add_argument('--auth-config', help='Local manager login and terminal credentials file')
+    parser.add_argument('--terminal-auth-config', help='Separate LAN terminal credential file for management issuance')
+    parser.add_argument('--terminal-source', default='', help='LAN feed origin prefilled for terminal connections')
     parser.add_argument('--upstream-config', help='Private MKM Flight Web connection JSON')
     parser.add_argument('--clock-service', help='Private loopback Windows OS clock helper connection JSON')
     parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
     parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
+    if args.terminal_auth_config and not args.auth_config:
+        parser.error('Terminal issuance configuration requires manager authentication')
     if args.auth_config and args.feed_config:
         parser.error('Choose either --auth-config or --feed-config')
     if args.clock_service and not args.auth_config:
@@ -205,7 +226,8 @@ if __name__ == '__main__':
         store.installed_airport=auth_site['airport']
         if upstream and upstream.connection()[1]['stationAirport'] != security.config()['airport']:
             parser.error('Manager and Web connection airport must match')
-        management = manager_handler(store, security,upstream,os_clock)
+        terminal_security=Security(args.terminal_auth_config) if args.terminal_auth_config else security
+        management = manager_handler(store, security,upstream,os_clock,terminal_security,args.terminal_source)
     if args.feed_config:
         from .security import Security
         from .lan import feed_handler
@@ -214,7 +236,7 @@ if __name__ == '__main__':
     ThreadingHTTPServer.request_queue_size=64
     server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
     if args.lan_port:
-        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, security))
+        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, terminal_security if args.auth_config else security))
         threading.Thread(target=lan_server.serve_forever, daemon=True).start()
         print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)
@@ -224,5 +246,7 @@ if __name__ == '__main__':
             except Exception:pass
             threading.Event().wait(60)
     threading.Thread(target=audit_cleanup,name='Audit retention',daemon=True).start()
+    from .daily import DailySchedules
+    DailySchedules(store).start()
     if upstream:upstream.start()
     server.serve_forever()

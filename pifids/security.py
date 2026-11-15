@@ -136,6 +136,24 @@ class Security:
                 raise ValueError('Invalid terminal configuration')
         return data
 
+    def issue_connection(self, display_id, source, replace=False):
+        Store.validate_display_id(display_id)
+        source = validate_source(source)
+        if type(replace) is not bool:
+            raise ValueError('Invalid replacement confirmation')
+        with self.lock:
+            config = self.config()
+            existing = display_id in config['terminals']
+            if existing and not replace:
+                raise ValueError('Connection already issued. Confirm replacement to invalidate the old key.')
+            token = secrets.token_urlsafe(32)
+            connection = dict(source=source, airport=config['airport'],
+                timezone=config.get('timezone',sites.DEFAULT_ZONES.get(config['airport'],'UTC')),
+                displayId=display_id, token=token)
+            config['terminals'][display_id] = hashlib.sha256(token.encode()).hexdigest()
+            write_private(self.path, config)
+            return connection, existing
+
     def login(self, username, password, peer):
         if not isinstance(username, str) or not isinstance(password, str) or len(password) > 1024:
             return None

@@ -156,12 +156,20 @@ def project(body, service_date):
     rows = []
     for flight in body['flights']:
         if flight['validFrom'] <= service_date <= flight['validTo'] and day.isoweekday() in flight['operatingDays']:
-            stable = json.dumps([*(body[key] for key in SCOPE), flight['id']],separators=(',',':'))
-            row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''), 'belt':flight.get('belt',''), 'remark':remark(flight)})
+            stable = json.dumps([*(body[key] for key in SCOPE), flight['id'], service_date],separators=(',',':'))
+            row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'geo':flight.get('geo',''),**({'codeshareFlights':flight.get('codeshareFlights',flight.get('codeshares',[]))} if flight.get('codeshareFlights') or flight.get('codeshares') else {}),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''),'belt':flight.get('belt',flight.get('baggage_belt','')), 'remark':remark(flight)})
             rows.append({**row, 'id':hashlib.sha256(stable.encode()).hexdigest()[:32]})
     if len(rows) > 100:
         raise ValueError('Current FIDS limit: 100 daily flights')
     return sorted(rows,key=lambda flight:(flight['time'],flight['flightNumber']))
+
+
+def init_tables(store):
+    with store.connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS upstream_sync (airport TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'manual',last_publish TEXT,published_date TEXT,published_version INTEGER,last_run TEXT,result TEXT)")
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_cache (airport TEXT PRIMARY KEY,manifest TEXT NOT NULL,body BLOB NOT NULL,checked_at TEXT NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_imports (airport TEXT PRIMARY KEY,flight_ids TEXT NOT NULL,service_date TEXT NOT NULL,web_version INTEGER NOT NULL,baseline TEXT NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS upstream_attempts (airport TEXT PRIMARY KEY,attempted_at TEXT NOT NULL,result TEXT NOT NULL)')
 
 
 class Upstream:
@@ -170,11 +178,7 @@ class Upstream:
         self.path = Path(config_path)
         self.lock = threading.RLock()
         self.connection()
-        with store.connect() as db:
-            db.execute("CREATE TABLE IF NOT EXISTS upstream_sync (airport TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'manual',last_publish TEXT,published_date TEXT,published_version INTEGER,last_run TEXT,result TEXT)")
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_cache (airport TEXT PRIMARY KEY,manifest TEXT NOT NULL,body BLOB NOT NULL,checked_at TEXT NOT NULL)')
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_imports (airport TEXT PRIMARY KEY,flight_ids TEXT NOT NULL,service_date TEXT NOT NULL,web_version INTEGER NOT NULL,baseline TEXT NOT NULL)')
-            db.execute('CREATE TABLE IF NOT EXISTS upstream_attempts (airport TEXT PRIMARY KEY,attempted_at TEXT NOT NULL,result TEXT NOT NULL)')
+        init_tables(store)
 
     def connection(self):
         config = json.loads(self.path.read_text(encoding='utf-8'))
@@ -290,23 +294,33 @@ class Upstream:
                     raise DraftConflict('Draft changed. Review it again before importing.')
                 rows = json.loads(draft)
                 old = db.execute('SELECT flight_ids,service_date,baseline FROM upstream_imports WHERE airport=?',(airport,)).fetchone()
+                local_exists=db.execute("SELECT 1 FROM sqlite_master WHERE name='local_schedule_cache'").fetchone()
+                local=db.execute('SELECT flight_ids,service_date,baseline FROM local_schedule_cache WHERE airport=?',(airport,)).fetchone() if local_exists else None
+                if local:old=local
                 old_ids = set(json.loads(old[0])) if old else set()
                 manual = [row for row in rows if row['id'] not in old_ids]
                 existing = {row['id']:row for row in rows if row['id'] in old_ids}
+                from .daily import carryovers, operation_key
+                carried = carryovers(db,airport,list(existing.values()),service_date,self.store.timezone(airport))
+                by_operation = {operation_key(row):row for row in existing.values()}
+                by_flight = {(row.get('direction','departure'),row['flightNumber']):row for row in existing.values()}
                 baseline = {row['id']:row for row in json.loads(old[2])} if old else {}
                 imported = []
                 for flight in info['flights']:
-                    if any(row.get('direction','departure')==flight['direction'] and row['flightNumber']==flight['flightNumber'] for row in manual):
+                    if any(operation_key(row)==operation_key(flight) for row in manual):
                         raise ValueError('A local flight has the same direction and flight number. Resolve it before importing.')
-                    previous = existing.get(flight['id'],{})
+                    previous = existing.get(flight['id'],by_operation.get(operation_key(flight),by_flight.get((flight['direction'],flight['flightNumber']),{})))
                     extras = {key:previous.get(key,flight.get(key,'')) for key in ('airlineLogo','languages')}
-                    if old and old[1] == service_date:
-                        extras.update({key:previous[key] for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','remark') if key in previous and previous[key]!=baseline.get(flight['id'],{}).get(key)})
+                    if old and old[1] == service_date and previous.get('serviceDate') == service_date:
+                        extras.update({key:previous[key] for key in ('estimatedTime','estimatedDate','actualTime','actualDate','gate','belt','remark','codeshareFlights') if key in previous and previous[key]!=baseline.get(previous.get('id'),{}).get(key)})
                     if flight['remark']=='Cancelled':
                         extras['remark']='Cancelled'
                     imported.append({**flight,**extras})
+                future=[row for row in existing.values() if row['serviceDate']>service_date]
+                imported = carried+imported+future
                 if len(manual)+len(imported)>100:
                     raise ValueError('Current FIDS limit: 100 flights')
+                if local:db.execute('DELETE FROM local_schedule_cache WHERE airport=?',(airport,))
                 db.execute('UPDATE state SET draft=?,draft_revision=draft_revision+1 WHERE airport=?',(json.dumps(manual+imported),airport))
                 after_by_id={row['id']:row for row in imported}
                 for flight_id in sorted(set(existing)|set(after_by_id)):
@@ -325,7 +339,8 @@ class Upstream:
     def sync_info(self, airport):
         with self.store.connect() as db:
             row=db.execute('SELECT mode,last_publish,last_run,result FROM upstream_sync WHERE airport=?',(airport,)).fetchone()
-        return {'mode':row[0] if row else 'manual','lastPublish':row[1] if row else None,'lastAutoCheck':row[2] if row else None,'autoResult':row[3] if row else None,'pollSeconds':60}
+        from .daily import status
+        return {'mode':row[0] if row else 'manual','lastPublish':row[1] if row else None,'lastAutoCheck':row[2] if row else None,'autoResult':row[3] if row else None,'pollSeconds':60,**status(self.store,airport)}
 
     def set_mode(self, airport, mode):
         self.require_airport(airport)

@@ -9,7 +9,7 @@ let syncedClock=null;
 let managerSession=null;
 function fidsNow(){return syncedClock?syncedClock.now(performance.now()):Date.now();}
 function setClock(clock,age=0){if(clock?.utcNow)syncedClock=BoardPolicy.synchronizedClock(new Date(Date.parse(clock.utcNow)+age).toISOString(),Date.now(),performance.now());}
-let assetUrls={};let offline=false;
+let assetUrls={};let offline=true;
 let displayConfig={mode:'board',airline:'',version:0};
 let lastDisplayRenderKey=null;
 let editing=null,pendingDelete=null,upstreamState=null,upstreamBusy=false;
@@ -18,17 +18,18 @@ try{settings={...settings,...JSON.parse(localStorage.getItem(settingsKey)||'{}')
 const boardWords={ja:['定刻','予定','行先／経由','航空会社','便名','ゲート','備考','出発地／経由','到着便'],en:['STD','ETD','Destination / Via','Airline','Flight','Gate','Remark','Origin / Via','Arrivals'],'zh-Hant':['預定','預計','目的地／經由','航空公司','航班','登機口','備註','出發地／經由','抵達航班'],'zh-Hans':['预定','预计','目的地／经由','航空公司','航班','登机口','备注','出发地／经由','到达航班'],ko:['예정','예상','목적지 / 경유','항공사','항공편','게이트','비고','출발지 / 경유','도착편']};
 function table(rows,display=false,draft=false){
  const board=document.createElement('table'), head=board.createTHead().insertRow();
- const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,7);
- if(arrival){labels[5]=({ja:'手荷物受取',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt';labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
+ const arrival=boardDirection()==='arrival';const labels=(boardWords[settings.language]||boardWords.en).slice(0,6).concat(({ja:'手荷物受取',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt',(boardWords[settings.language]||boardWords.en)[6]);
+ if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
  const columns=display?boardColumns():null;
- for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','備考','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
+ for(const label of display?columns.map(key=>labels[BoardPolicy.columns.indexOf(key)]):['便名','出発／到着','行先／出発地','運航日','STD / STA','ETD / ETA','ATD / ATA','ゲート','ベルト','備考','コードシェア便','言語',...(draft?['操作']:[])].map(mt)){const th=document.createElement('th');th.textContent=label;head.append(th);}
  const body=board.createTBody();
  for(const flight of rows){
+  const shownNumber=display?BoardPolicy.codeshareNumber(flight,displayConfig.board,fidsNow()):flight.flightNumber;
   const row=body.insertRow();const langs=display?[settings.language]:[];row.lang=settings.language;
-  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(flight.flightNumber,row.lang),flight.flightNumber,(arrival?flight.belt:flight.gate)||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.remark||'',mt('端末ごとに設定')];
+  const values=display?[flight.time,flight.estimatedTime||'',AirportNames.label(state?.airportNames,flight.destination,row.lang),airlineLabel(shownNumber,row.lang)||airlineCode(shownNumber),shownNumber,flight.gate||'',flight.belt||'',flight.remark||'']:[flight.flightNumber,mt(flight.direction==='arrival'?'到着':'出発'),flight.destination,flight.serviceDate||'',flight.time,flight.estimatedTime?(flight.estimatedDate&&flight.estimatedDate!==flight.serviceDate?flight.estimatedDate+' ':'')+flight.estimatedTime:'',flight.actualTime?(flight.actualDate&&flight.actualDate!==flight.serviceDate?flight.actualDate+' ':'')+flight.actualTime:'',flight.gate||'',flight.belt||'',flight.remark||'',(flight.codeshareFlights||[]).join(', '),mt('端末ごとに設定')];
   const shown=display?columns.map(key=>values[BoardPolicy.columns.indexOf(key)]):values;
   for(const value of shown){const cell=row.insertCell();cell.textContent=value;}
-  if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
+  if(display){const widths={scheduled:8,estimated:8,destination:25,airline:12,flight:12,gate:6,belt:6,remark:15},total=columns.reduce((n,key)=>n+widths[key],0);for(const [i,key]of columns.entries()){head.cells[i].style.width=widths[key]/total*100+'%';head.cells[i].dataset.column=key;row.cells[i].dataset.column=key;}}
   if(draft){
    const cell=row.insertCell();
    function button(label,action){const node=document.createElement('button');node.type='button';node.textContent=mt(label);node.onclick=action;cell.append(node);}
@@ -40,32 +41,42 @@ function table(rows,display=false,draft=false){
     button('削除',()=>{pendingDelete={airport:state.airport,id:flight.id,expectedDraftRevision:state.draftRevision};render();});
    }
   }
-  const effectiveLogo=airlineEntry(flight.flightNumber)?.logo||flight.airlineLogo;
-  if(display&&columns.includes('airline')&&effectiveLogo&&assetUrls[effectiveLogo]){const logo=document.createElement('img');logo.className='flight-logo';logo.alt=flight.flightNumber+' 航空会社ロゴ';logo.src=assetUrls[effectiveLogo];row.cells[columns.indexOf('airline')].classList.add('airline-logo-cell');row.cells[columns.indexOf('airline')].replaceChildren(logo);}
+  const effectiveLogo=airlineEntry(shownNumber)?.logo||(shownNumber===flight.flightNumber?flight.airlineLogo:'');
+  if(display&&columns.includes('airline')&&effectiveLogo&&assetUrls[effectiveLogo]){const logo=document.createElement('img');logo.className='flight-logo';logo.alt=shownNumber+' 航空会社ロゴ';logo.src=assetUrls[effectiveLogo];row.cells[columns.indexOf('airline')].classList.add('airline-logo-cell');row.cells[columns.indexOf('airline')].replaceChildren(logo);}
  }
  return board;
 }
+function portraitBoard(rows){
+ const list=document.createElement('div');const columns=boardColumns(),labels=(boardWords[settings.language]||boardWords.en).slice(0,6).concat(({ja:'手荷物受取',en:'Belt','zh-Hant':'行李轉盤','zh-Hans':'行李转盘',ko:'수하물 벨트'})[settings.language]||'Belt',(boardWords[settings.language]||boardWords.en)[6]),arrival=boardDirection()==='arrival';if(arrival){labels[2]=(boardWords[settings.language]||boardWords.en)[7];if(settings.language==='en'){labels[0]='STA';labels[1]='ETA';}}
+ for(const flight of rows){const shownNumber=BoardPolicy.codeshareNumber(flight,displayConfig.board,fidsNow());const card=document.createElement('section');card.className='portrait-flight';const values={scheduled:flight.time,estimated:flight.estimatedTime||'',destination:AirportNames.label(state?.airportNames,flight.destination,settings.language),airline:airlineLabel(shownNumber,settings.language)||airlineCode(shownNumber),flight:shownNumber,gate:flight.gate||'',belt:flight.belt||'',remark:flight.remark||''};for(const key of columns){const block=document.createElement('div');block.dataset.column=key;const label=document.createElement('small');label.textContent=labels[BoardPolicy.columns.indexOf(key)];const value=document.createElement('strong');value.textContent=values[key];if(key==='airline'){const logo=airlineEntry(shownNumber)?.logo||(shownNumber===flight.flightNumber?flight.airlineLogo:'');if(logo&&assetUrls[logo]){const img=document.createElement('img');img.className='portrait-logo';img.src=assetUrls[logo];img.alt=values.airline;value.replaceChildren(img);}}block.append(label,value);card.append(block);}list.append(card);}return list;
+}
+function updateConnectionStatus(){
+ const node=$('connectionStatus');if(!node)return;
+ node.textContent=offline?'Off-Line':'On-Line';node.className=offline?'off-line':'on-line';
+ node.title=offline?'管理PCとの通信停止・保存済みデータを表示中':'管理PCから正常に受信中';
+}
 function render(){
+ if(!manager)updateConnectionStatus();
  if(!state)return;
  if(manager){updateEditorLabels();$('draft').replaceChildren(state.draft.length?table(state.draft,false,true):emptyManager('下書きの便はありません。便を追加するかWebから取り込んでください。'));$('published').replaceChildren(state.flights.length?table(state.flights):emptyManager('公開済みの便はありません。下書きを確認して公開してください。'));return;}
  if(displayConfig.mode==='board'){settings.language=BoardPolicy.language(displayConfig.board,fidsNow());settings.interval=displayConfig.board?.languageInterval||8;}
  const fallback=displayConfig.signage?.enabled&&(displayConfig.mode==='board'||displayConfig.airline==='MKM Airworks'&&!displayConfig.image&&!displayConfig.logo||!SignagePolicy.active(displayConfig.signage,fidsNow(),state.timezone));
  const effectiveImage=fallback?(assetUrls[displayConfig.signage.defaultImage]||'/static/branding/mkm-airworks-horizontal.png'):assetUrls[displayConfig.image];
  const mode=fallback?'counter':displayConfig.mode, fullImage=mode!=='board'&&!!effectiveImage;
- const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.classList.toggle('image-only',fullImage);
+ const arrival=boardDirection()==='arrival';document.body.dataset.direction=arrival?'arrival':'departure';document.body.dataset.mode=mode;document.body.dataset.orientation=displayConfig.board?.orientation||'landscape';document.body.classList.toggle('image-only',fullImage);$('titlePictogram').hidden=mode!=='board';
  const labels=words[settings.language]||words.en;
  const purposes={ja:['チェックイン','搭乗口'],en:['Check-in','Boarding gate'],'zh-Hant':['報到櫃檯','登機口'],'zh-Hans':['值机柜台','登机口'],ko:['체크인','탑승구']};
  const purpose=(purposes[settings.language]||purposes.en)[mode==='counter'?0:1];
- const pageSize=Number.isInteger(settings.rows)&&settings.rows>=4&&settings.rows<=16?settings.rows:8;
+ const portrait=displayConfig.board?.orientation==='portrait';
+ const pageSize=portrait?6:Number.isInteger(settings.rows)&&settings.rows>=4&&settings.rows<=16?settings.rows:8;
  const visibleFlights=mode==='board'?BoardPolicy.visible(state.flights,arrival?'arrival':'departure',displayConfig,fidsNow()):[];
  const pages=Math.max(1,Math.ceil(visibleFlights.length/pageSize));
  const page=Math.floor(fidsNow()/1000/15)%pages;
- const renderKey=mode!=='board'?JSON.stringify([mode,displayConfig,fallback,settings.logo]):JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
+ const renderKey=mode!=='board'?JSON.stringify([mode,displayConfig,fallback,settings.logo]):JSON.stringify([visibleFlights,state.version,displayConfig.version,mode,fullImage,settings.language,settings.direction,visibleFlights.map(f=>BoardPolicy.codeshareNumber(f,displayConfig.board,fidsNow())),page,pageSize,Math.floor(fidsNow()/1000/settings.interval),settings.logo]);
  $('status').textContent=(offline?'通信停止・保存済み表示 · ':'')+'画面 '+displayId+' · 表示指示 '+displayConfig.version+' · 版 '+state.version+' · 最終取得 '+lastSuccess.toLocaleTimeString();
- updateDisplayConnection(mode==='board');
  if(lastDisplayRenderKey===renderKey)return;lastDisplayRenderKey=renderKey;
  if(mode==='board'){
-  if(visibleFlights.length){const board=table(visibleFlights.slice(page*pageSize,(page+1)*pageSize),true);board.className='flight-board';board.style.setProperty('--page-rows',pageSize);$('board').replaceChildren(board);}
+  if(visibleFlights.length){const rows=visibleFlights.slice(page*pageSize,(page+1)*pageSize),board=portrait?portraitBoard(rows):table(rows,true);board.classList.add(portrait?'portrait-board':'flight-board');board.style.setProperty('--page-rows',pageSize);$('board').replaceChildren(board);}
   else{const empty=document.createElement('div');empty.className='empty-board';empty.textContent='No flights to display / 表示対象便なし';$('board').replaceChildren(empty);}
   $('pageIndicator').textContent=(page+1)+' / '+pages;
  }else{
@@ -82,6 +93,7 @@ function render(){
  const airportLogo=$('airportLogo'),boardLogo=displayConfig.board?.logo;airportLogo.src=mode==='board'&&boardLogo?assetUrls[boardLogo]||'':settings.logo;airportLogo.hidden=!airportLogo.getAttribute('src');
  $('title').textContent=mode==='board'?(arrival?(boardWords[settings.language]||boardWords.en)[8]:labels[0]):purpose;
  if(settings.language==='en'&&mode==='board')$('title').textContent=arrival?'Arrivals':'Departures';
+ const traffic=displayConfig.board?.traffic||'all';if(mode==='board'&&traffic!=='all'){const prefixes={ja:{domestic:'国内線',international:'国際線'},en:{domestic:'Domestic',international:'International'},'zh-Hans':{domestic:'国内',international:'国际'},'zh-Hant':{domestic:'國內',international:'國際'},ko:{domestic:'국내선',international:'국제선'}};$('title').textContent=(prefixes[settings.language]||prefixes.en)[traffic]+' '+$('title').textContent;}
  $('footerAirport').textContent=airport+' · '+(mode==='board'?'Flight information':displayConfig.airline);
  $('localDate').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:state?.timezone||(airport==='ROR'?'Pacific/Palau':'Asia/Tokyo'),day:'2-digit',month:'short',year:'numeric'}).format(new Date(fidsNow()));
  $('status').textContent=(offline?'通信停止・保存済み表示 · ':'')+'画面 '+displayId+' · 表示指示 '+displayConfig.version+' · 版 '+state.version+' · 最終取得 '+lastSuccess.toLocaleTimeString();
@@ -95,19 +107,12 @@ function resetEditor(){editing=null;$('flightForm').reset();$('flightForm').elem
 function editFlight(flight){
  $('flightEditor').open=true;
  editing={id:flight.id,expectedDraftRevision:state.draftRevision};pendingDelete=null;
- for(const key of ['flightNumber','destination','serviceDate','time','estimatedTime','estimatedDate','actualTime','actualDate','gate','remark','airlineLogo','direction'])$('flightForm').elements[key].value=flight[key]||(key==='direction'?'departure':'');
+ for(const key of ['flightNumber','destination','serviceDate','time','estimatedTime','estimatedDate','actualTime','actualDate','gate','belt','remark','airlineLogo','direction','geo'])$('flightForm').elements[key].value=flight[key]||(key==='direction'?'departure':'');
+ $('flightForm').elements.codeshares.value=(flight.codeshareFlights||[]).join(', ');
  selected=[...(flight.languages||[])];for(const [index,box]of [...$('languages').querySelectorAll('input')].entries())box.checked=selected.includes(Object.keys(names)[index]);
  $('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');render();$('flightForm').scrollIntoView({behavior:'smooth',block:'start'});
 }
-function updateDisplayConnection(isBoard) {
- const indicator=$('displayConnection');
- indicator.hidden=!isBoard;
- if(!isBoard)return;
- const label=offline?'Off-Line':'On-Line';
- indicator.className=offline?'off-line':'on-line';
- if(indicator.textContent!==label)indicator.textContent=label;
-}
-async function refresh(){try{if(manager){const sessionResponse=await fetch('/api/session');if(!sessionResponse.ok)throw Error('Could not load session');const session=await sessionResponse.json();if(!session.authenticated){location.replace('/login');return;}if(JSON.stringify(session.user)!==JSON.stringify(managerSession?.user)){managerSession=session;window.managerSession=session;window.dispatchEvent(new Event('managersessionchange'));managerPage();}}const a=manager?$('airport').value:airport;const response=await fetch('/api/state?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('取得失敗'));const next=await response.json();if(!manager){const control=await fetch('/api/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(displayId));if(!control.ok)throw Error('表示指示の取得失敗');const nextControl=await control.json();const contentChanged=JSON.stringify([nextControl,next.flights,next.airportNames,next.airlineNames])!==JSON.stringify([displayConfig,state?.flights,state?.airportNames,state?.airlineNames]);if(contentChanged){const nextUrls=await prepareAssets(nextControl,false,next.flights,next.airlineNames);const previousUrls=assetUrls;assetUrls=nextUrls;displayConfig=nextControl;lastDisplayRenderKey=null;setTimeout(()=>{for(const url of Object.values(previousUrls))URL.revokeObjectURL(url);},1000);}displayConfig=nextControl;}state=next;if(manager)window.installationTimezone=next.timezone;BoardPolicy.configureTimezone(next.timezone||'Asia/Tokyo');setClock(next.clock);lastSuccess=new Date();offline=false;if(!manager){try{localStorage.setItem(settingsKey+':snapshot',JSON.stringify({state,displayConfig,lastSuccess:lastSuccess.toISOString()}));}catch{}}render();if(manager){$('displayLink').href='/display?airport='+a;refreshAirportCodes();refreshAirlineCodes();await refreshAssets(a);await refreshRegistry(a);await refreshUpstream(a);if(managerSession?.user?.role==='admin')await refreshClock();}}catch(error){offline=true;if(!manager)updateDisplayConnection(!state||document.body.dataset.mode==='board');$(manager?'message':'status').textContent=(manager?'Update stopped: '+error.message:'更新停止：'+error.message+'（最後の表示を保持）');}}
+async function refresh(){try{if(manager){const sessionResponse=await fetch('/api/session');if(!sessionResponse.ok)throw Error('Could not load session');const session=await sessionResponse.json();if(!session.authenticated){location.replace('/login');return;}if(JSON.stringify(session.user)!==JSON.stringify(managerSession?.user)){managerSession=session;window.managerSession=session;window.dispatchEvent(new Event('managersessionchange'));managerPage();}}const a=manager?$('airport').value:airport;const response=await fetch('/api/state?airport='+encodeURIComponent(a));if(!response.ok)throw Error(mt('取得失敗'));const next=await response.json();if(!manager){const control=await fetch('/api/display?airport='+encodeURIComponent(a)+'&displayId='+encodeURIComponent(displayId));if(!control.ok)throw Error('表示指示の取得失敗');const nextControl=await control.json();const contentChanged=JSON.stringify([nextControl,next.flights,next.airportNames,next.airlineNames])!==JSON.stringify([displayConfig,state?.flights,state?.airportNames,state?.airlineNames]);if(contentChanged){const nextUrls=await prepareAssets(nextControl,false,next.flights,next.airlineNames);const previousUrls=assetUrls;assetUrls=nextUrls;displayConfig=nextControl;lastDisplayRenderKey=null;setTimeout(()=>{for(const url of Object.values(previousUrls))URL.revokeObjectURL(url);},1000);}displayConfig=nextControl;}state=next;if(manager)window.installationTimezone=next.timezone;BoardPolicy.configureTimezone(next.timezone||'Asia/Tokyo');setClock(next.clock);lastSuccess=new Date();offline=false;if(!manager){const health=await fetch('/api/receiver-status',{cache:'no-store'});if(health.ok)offline=!(await health.json()).online;else if(health.status!==404)offline=true;updateConnectionStatus();}if(!manager){try{localStorage.setItem(settingsKey+':snapshot',JSON.stringify({state,displayConfig,lastSuccess:lastSuccess.toISOString()}));}catch{}}render();if(manager){$('displayLink').href='/display?airport='+a;refreshAirportCodes();refreshAirlineCodes();await refreshAssets(a);await refreshRegistry(a);await refreshUpstream(a);if(managerSession?.user?.role==='admin')await refreshClock();}}catch(error){offline=true;if(!manager)updateConnectionStatus();$(manager?'message':'status').textContent=(manager?'Update stopped: '+error.message:'更新停止：'+error.message+'（最後の表示を保持）');}}
 async function post(path,data){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw Error(result.error);await refresh();return result;}
 if(manager){$('openFlightEditor').onclick=()=>{resetEditor();$('flightEditor').open=true;$('flightEditor').scrollIntoView({behavior:'smooth',block:'start'});};for(const [code,name]of Object.entries(names)){const label=document.createElement('label');const box=document.createElement('input');box.type='checkbox';box.onchange=()=>{selected=selected.filter(x=>x!==code);if(box.checked)selected.push(code);$('languageOrder').textContent=selected.map(x=>names[x]).join(' → ');};label.append(box,document.createTextNode(name));$('languages').append(label);}$('airport').onchange=()=>{resetEditor();pendingDelete=null;refresh();};$('cancelEdit').onclick=resetEditor;$('flightForm').onsubmit=async event=>{event.preventDefault();try{const data=Object.fromEntries(new FormData(event.target));await post(editing?'/api/flights/update':'/api/flights',{...data,airport:$('airport').value,languages:selected,...(editing||{})});resetEditor();$('message').textContent=mt('下書きを保存しました。公開すると表示に反映されます。');}catch(error){$('message').textContent=error.message;}};$('publish').onclick=async()=>{try{await post('/api/publish',{airport:$('airport').value});$('message').textContent=mt('公開しました。');}catch(error){$('message').textContent=error.message;}};}else{for(const [code,name]of Object.entries(names)){const option=document.createElement('option');option.value=code;option.textContent=name;$('defaultLanguage').append(option);}$('defaultLanguage').value=settings.language;$('interval').value=settings.interval;$('logoUrl').value=settings.logo;$('rowsPerPage').value=settings.rows;$('boardDirection').value=settings.direction;function logo(){const image=$('airportLogo');image.hidden=!settings.logo;image.src=settings.logo;image.onerror=()=>image.hidden=true;}logo();$('saveSettings').onclick=()=>{const interval=Number($('interval').value);if(!Number.isFinite(interval)||interval<3||interval>60)return;const raw=$('logoUrl').value.trim();if(raw){try{const url=new URL(raw);if(!['http:','https:'].includes(url.protocol))return;}catch{return;}}const rows=Number($('rowsPerPage').value);if(!Number.isInteger(rows)||rows<4||rows>16)return;settings={language:$('defaultLanguage').value,interval,logo:raw,rows,direction:$('boardDirection').value};localStorage.setItem(settingsKey,JSON.stringify(settings));logo();render();};setInterval(()=>{$('clock').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:state?.timezone||(airport==='ROR'?'Pacific/Palau':'Asia/Tokyo'),hour:'2-digit',minute:'2-digit'}).format(new Date(fidsNow()));if(state)render();},1000);}
 
@@ -191,8 +196,8 @@ async function loadDisplayControl(){
  for(const key of ['departureHideMinutes','arrivalHideMinutes'])$('displayForm').elements[key].value=control[key];
  $('defaultImage').value=control.signage?.defaultImage||'';$('defaultImageFile').value='';
  const terminal=registryState.terminals.find(x=>x.displayId===identity[1]);$('displayForm').elements.name.value=terminal?.name||'';
- $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;
- for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns).includes(box.value);
+ $('terminalUsage').value=terminal?.usage||'signage';$('terminalDirection').value=control.board?.direction||'departure';$('terminalTraffic').value=control.board?.traffic||'all';$('terminalOrientation').value=control.board?.orientation||'landscape';$('boardLogo').value=control.board?.logo||'';loadTerminalLanguages(control.board?.languages||['en','ja']);$('terminalLanguageInterval').value=control.board?.languageInterval||8;$('terminalCodeshareEnabled').checked=control.board?.codeshareEnabled!==false;$('terminalCodeshareInterval').value=control.board?.codeshareInterval||5;for(const direction of ['departure','arrival'])$(direction+'ShowMinutes').value=control.board?.[direction+'ShowMinutes']??'';
+ for(const direction of ['departure','arrival'])for(const box of $(direction+'Columns').querySelectorAll('input'))box.checked=(control.board?.[direction+'Columns']||BoardPolicy.columns.filter(x=>x!=='belt')).includes(box.value);
  $('terminalProfile').replaceChildren();for(const profile of [{name:mt('なし'),value:''},...registryState.profiles.map(p=>({name:p.name,value:p.name}))]){const option=document.createElement('option');option.value=profile.value;option.textContent=profile.name;$('terminalProfile').append(option);}$('terminalProfile').value=terminal?.profileName||'';boardFormVisibility();
 }
 
@@ -232,16 +237,16 @@ async function signageStatus(){
 let signageViewedTerminal='',savedProfile=null;
 function managerPage(){
  if(!manager)return;const hash=location.hash||'#flightsPanel';
- let page=['#signagePanel','#screensPanel','#assetsPanel','#airportCodesPanel','#usersPanel','#clockPanel','#auditPanel'].includes(hash)?hash:'#flightsPanel';
+ let page=['#signagePanel','#screensPanel','#assetsPanel','#airportCodesPanel','#usersPanel','#clockPanel','#auditPanel','#backupPanel'].includes(hash)?hash:'#flightsPanel';
  const allowed=managerSession?.user?.role==='admin';
  if(!allowed&&!['#flightsPanel','#signagePanel'].includes(page))page='#flightsPanel';
  for(const link of document.querySelectorAll('.manager-nav a'))link.hidden=!allowed&&!['#flightsPanel','#signagePanel'].includes(link.hash);
  $('flightPage').hidden=page!=='#flightsPanel';
- for(const id of ['signagePanel','screensPanel','assetsPanel','airportCodesPanel','usersPanel','clockPanel','auditPanel'])$(id).hidden=page!=='#'+id;
+ for(const id of ['signagePanel','screensPanel','assetsPanel','airportCodesPanel','usersPanel','clockPanel','auditPanel','backupPanel'])$(id).hidden=page!=='#'+id;
  for(const link of document.querySelectorAll('.manager-nav a')){if(link.hash===page)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
- const titles={'#flightsPanel':'フライト情報管理','#signagePanel':'チェックイン・ゲート表示管理','#screensPanel':'端末の設定','#assetsPanel':'ロゴ・画像登録','#airportCodesPanel':'航空会社・空港コード入力・更新','#clockPanel':'時刻同期・修正','#usersPanel':'ユーザー管理','#auditPanel':'監査ログ'};
+ const titles={'#backupPanel':'バックアップ・復元','#flightsPanel':'フライト情報管理','#signagePanel':'チェックイン・ゲート表示管理','#screensPanel':'端末の設定','#assetsPanel':'ロゴ・画像登録','#airportCodesPanel':'航空会社・空港コード入力・更新','#clockPanel':'時刻同期・修正','#usersPanel':'ユーザー管理','#auditPanel':'監査ログ'};
  document.querySelector('.manager-intro h1').textContent=mt(titles[page]);
- const descriptions={'#flightsPanel':'便を編集して公開し、空港内の表示を管理します。','#signagePanel':'登録済みの端末と表示画面を選択して切り替えます。','#screensPanel':'航空会社・クラスなど、運用で分かる名称を登録します。','#assetsPanel':'ロゴと案内画面を用途別に登録します。','#airportCodesPanel':'空港コードと表示言語ごとの空港名を登録します。','#clockPanel':'表示端末の時計は管理端末とLANで同期します。','#usersPanel':'ユーザーの登録・権限・利用状態を管理します。','#auditPanel':'誰が何を更新したか確認します。'};
+ const descriptions={'#backupPanel':'保存したデータを検証し、別フォルダーへ復元を準備します。','#flightsPanel':'便を編集して公開し、空港内の表示を管理します。','#signagePanel':'登録済みの端末と表示画面を選択して切り替えます。','#screensPanel':'航空会社・クラスなど、運用で分かる名称を登録します。','#assetsPanel':'ロゴと案内画面を用途別に登録します。','#airportCodesPanel':'空港コードと表示言語ごとの空港名を登録します。','#clockPanel':'表示端末の時計は管理端末とLANで同期します。','#usersPanel':'ユーザーの登録・権限・利用状態を管理します。','#auditPanel':'誰が何を更新したか確認します。'};
  document.querySelector('.manager-intro > div > p:last-child').textContent=mt(descriptions[page]);
 }
 if(manager){
@@ -260,16 +265,20 @@ if(manager){
 }
 
 function boardDirection(){return displayConfig.board?.direction||settings.direction;}
-function boardColumns(){return BoardPolicy.selectedColumns(displayConfig.board,boardDirection());}
-function readBoardForm(){const data={direction:$('terminalDirection').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value)};for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
+function boardColumns(){
+ const direction=boardDirection(), config=displayConfig.board;
+ if(direction==='arrival'&&!config?.arrivalColumns?.length)return BoardPolicy.columns.filter(key=>key!=='gate');
+ return BoardPolicy.selectedColumns(config,direction);
+}
+function readBoardForm(){const data={direction:$('terminalDirection').value,traffic:$('terminalTraffic').value,orientation:$('terminalOrientation').value,logo:$('boardLogo').value,languages:terminalLanguages,languageInterval:Number($('terminalLanguageInterval').value),codeshareEnabled:$('terminalCodeshareEnabled').checked,codeshareInterval:Number($('terminalCodeshareInterval').value)};for(const direction of ['departure','arrival'])data[direction+'ShowMinutes']=$(direction+'ShowMinutes').value===''?null:Number($(direction+'ShowMinutes').value);for(const direction of ['departure','arrival'])data[direction+'Columns']=[...$(direction+'Columns').querySelectorAll('input:checked')].map(x=>x.value);return data;}
 function boardFormVisibility(){ $('terminalProfileSettings').hidden=$('terminalUsage').value!=='signage';
  const board=$('terminalUsage').value==='board';$('boardTerminalSettings').hidden=!board;$('defaultImageSettings').hidden=board;
  for(const input of $('boardTerminalSettings').querySelectorAll('input,select'))input.disabled=!board;
  $('departureColumnSettings').hidden=$('terminalDirection').value!=='departure';$('arrivalColumnSettings').hidden=$('terminalDirection').value!=='arrival';
 }
 if(manager){
- const labels={scheduled:'定刻',estimated:'予定時刻',destination:'行先／出発地',airline:'航空会社ロゴ',flight:'便名',gate:'ゲート',remark:'備考'};
- for(const direction of ['departure','arrival'])for(const key of BoardPolicy.columns){const label=document.createElement('label'),box=document.createElement('input'),caption=document.createElement('span');box.type='checkbox';box.value=key;box.checked=true;caption.dataset.managerLabel=labels[key];caption.textContent=mt(labels[key]);label.append(box,caption);$(direction+'Columns').append(label);}
+ const labels={scheduled:'定刻',estimated:'予定時刻',destination:'行先／出発地',airline:'航空会社ロゴ',flight:'便名',gate:'ゲート',belt:'ベルト',remark:'備考'};
+ for(const direction of ['departure','arrival'])for(const key of BoardPolicy.columns.filter(x=>direction==='arrival'||x!=='belt')){const label=document.createElement('label'),box=document.createElement('input'),caption=document.createElement('span');box.type='checkbox';box.value=key;box.checked=key!=='belt';caption.dataset.managerLabel=labels[key];caption.textContent=mt(labels[key]);label.append(box,caption);$(direction+'Columns').append(label);}
  $('terminalUsage').onchange=boardFormVisibility;$('terminalDirection').onchange=boardFormVisibility;boardFormVisibility();
  $('displayForm').addEventListener('reset',()=>queueMicrotask(boardFormVisibility));
  function assetHelp(){$('signageSizeHelp').hidden=$('assetKind').value!=='signage';$('logoSizeHelp').hidden=$('assetKind').value!=='logo';}
@@ -321,7 +330,7 @@ function renderTerminalLists(){
  const language=$('managerLanguage').value;
  const key=JSON.stringify([registryState,language]);
  if(renderTerminalLists.key===key)return;renderTerminalLists.key=key;
- const current=t=>t.currentDisplay||t.profileName|| (t.usage==='board'?mt(t.direction==='arrival'?'到着':'出発')+' · '+mt('便一覧'):mt('Default画像'));
+ const current=t=>t.currentDisplay||t.profileName|| (t.usage==='board'?mt(t.direction==='arrival'?'到着':'出発')+' · '+mt('便一覧')+' · '+mt(t.traffic==='domestic'?'国内線':t.traffic==='international'?'国際線':'すべて')+' · '+mt(t.orientation==='portrait'?'縦置き':'横置き'):mt('Default画像'));
  function make(target,items,signage){
   const container=$(target);container.replaceChildren();
   if(!items.length){container.append(emptyManager('登録済みの端末はありません'));return;}
@@ -334,6 +343,7 @@ function renderTerminalLists(){
    if(signage){cell.classList.add('signage-actions');const select=document.createElement('select');const fallbackOption=document.createElement('option');fallbackOption.value='';fallbackOption.textContent=mt('Default画像');select.append(fallbackOption);for(const profile of registryState.profiles){const option=document.createElement('option');option.value=profile.name;option.textContent=profile.name;select.append(option);}select.value=t.profileName||'';cell.append(select);const inputs={};for(const [name,label,type] of [['start','表示開始','time'],['end','表示終了','time'],['date','表示日（空欄なら毎日）','date']]){const wrapper=document.createElement('label');wrapper.textContent=mt(label);const input=document.createElement('input');input.type=type;input.value=t.signage?.[name]||'';input.setAttribute('aria-label',mt(label));inputs[name]=input;wrapper.append(input);cell.append(wrapper);}
     button('表示を切り替える',async()=>{try{await post('/api/signage',{airport:$('airport').value,displayId:t.displayId,profileName:select.value,...Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value]))});signageViewedTerminal='';$('message').textContent=mt('表示を切り替えました。対象画面を確認してください。');}catch(e){$('message').textContent=e.message;}});
    }else{
+    button('接続設定',()=>window.openTerminalConnection(t.displayId));
     button('設定を変更',()=>{$('registeredTerminal').value=t.displayId;$('displayId').value=t.displayId;loadDisplayControl().then(()=>$('displayForm').scrollIntoView({behavior:'smooth'}));});
     button('削除',async()=>{if(!confirm(mt('この端末の登録を削除しますか？')+' '+t.name))return;try{await post('/api/terminals/delete',{airport:$('airport').value,displayId:t.displayId});$('registeredTerminal').value='';$('displayId').value='';$('displayForm').elements.name.value='';$('message').textContent=mt('端末の登録を削除しました。');}catch(e){$('message').textContent=e.message;}});
    }
@@ -352,7 +362,10 @@ function renderWebSync(result){
  const labels={online:t('オンライン','Online'),offline:t('オフライン — 最後の公開情報を継続表示','Offline — retaining last published data'),unknown:t('未確認','Not checked'),error:t('接続エラー（認証・データを確認）','Connection error (check credentials or data)')};
  $('upstreamConnection').textContent=t('接続状態：','Connection: ')+(result.configured?labels[result.connectionStatus||'unknown']:t('未設定','Not configured'));
  const format=value=>value?new Date(value).toLocaleString(en?'en-GB':'ja-JP',{timeZone:state?.timezone||'Asia/Tokyo'}):'—';
- $('upstreamTimes').textContent=t('最終受信：','Last received: ')+format(result.lastSuccess)+' · '+t('最終Web公開：','Last Web publication: ')+format(result.lastPublish)+' · '+t('接続確認：','Connection checked: ')+format(result.lastAttempt);
+ $('upstreamTimes').textContent=t('最終受信：','Last received: ')+format(result.lastSuccess)+' · '+t('最終公開：','Last publication: ')+format(result.lastPublish)+' · '+t('接続確認：','Connection checked: ')+format(result.lastAttempt);
+ const daily=result.dailySchedule;
+ const dailyStates={review_required:t('未公開の変更を確認・公開してください。','Review and publish pending changes.'),expired:t('保存済みダイヤの有効期間が終了しています。','The saved schedule has expired.'),not_yet_effective:t('保存済みダイヤは有効期間前です。','The saved schedule is not yet effective.'),failed:t('日次更新に失敗しました。最後の公開情報を保持しています。','Daily publication failed. Keeping the last publication.'),waiting_for_first_import:t('最初にダイヤを取り込み・公開してください。','Import and publish a schedule first.'),future_publication:t('未来日の便が取り込まれています。運航日を確認してください。','Future services have been imported. Check the service date.')};
+ $('upstreamDaily').textContent=t('保存済みダイヤから当日便と、表示開始時間になった翌日以降の便を1分以内に準備・公開します。Web未接続でも動作します。遅延便は表示終了時刻まで表示します。','Prepares and publishes today’s flights and future flights reaching their display start within one minute, even without Web access. Delayed flights remain until their display deadlines.')+(dailyStates[daily?.result]?' '+dailyStates[daily.result]:'');
  const states={review_required:t('未公開の変更があります。下書きを確認・公開してから自動同期を再開します。','Unpublished changes require review and publication before automatic sync can resume.'),not_applicable:t('当日適用できるWeb情報がありません。最後の公開情報を保持しています。','No applicable Web data for today. Keeping last published data.'),failed:t('自動同期に失敗しました。最後の公開情報を保持し、次回再試行します。','Automatic sync failed. Keeping last published data and retrying next time.')};
  if(states[result.autoResult])$('upstreamConnection').textContent+=' · '+states[result.autoResult];
 }
@@ -366,6 +379,7 @@ function renderTerminalLanguages(){const area=$('terminalLanguageOrder');area.re
 if(manager){$('addTerminalLanguage').onclick=()=>{const code=$('terminalLanguageChoice').value;if(!terminalLanguages.includes(code)){terminalLanguages.push(code);renderTerminalLanguages();}};loadTerminalLanguages(['en','ja']);}
 
 function airlineEntry(number){const text=String(number).trim().toUpperCase();const code=Object.keys(state?.airlineNames||{}).sort((a,b)=>b.length-a.length).find(code=>text.startsWith(code)&&/^\s*\d/.test(text.slice(code.length)));const item=state?.airlineNames?.[code];return item;}
+function airlineCode(number){return String(number).trim().toUpperCase().match(/^([A-Z0-9]{2,3}?)(?=\s*\d)/)?.[1]||'';}
 function airlineLabel(number,language){const item=airlineEntry(number);return item?.[language]||item?.en||'';}
 function refreshAirlineCodes(){if(!manager)return;const entries=Object.entries(state?.airlineNames||{}).sort(([a],[b])=>a.localeCompare(b));const select=$('registeredAirlineCode'),old=select.value;select.replaceChildren(new Option(mt('新しい航空会社コード'),''));for(const [code,item] of entries)select.add(new Option(code+' · '+item.en,code));if(entries.some(([code])=>code===old))select.value=old;const table=document.createElement('table'),head=table.createTHead().insertRow();for(const label of ['航空会社コード（2～3文字）','日本語','English']){const th=document.createElement('th');th.textContent=mt(label);head.append(th);}for(const [code,item] of entries){const row=table.insertRow();for(const text of [code,item.ja,item.en])row.insertCell().textContent=text||'';}$('airlineCodeList').replaceChildren(table);}
 if(manager){$('registeredAirlineCode').onchange=()=>{const form=$('airlineCodeForm'),code=$('registeredAirlineCode').value,item=state?.airlineNames?.[code]||{};form.elements.code.value=code;for(const lang of ['ja','en','logo'])form.elements[lang].value=item[lang]||'';$('airlineLogoFile').value='';};$('airlineCodeForm').onsubmit=async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.target)),code=data.code.toUpperCase();delete data.code;try{const file=$('airlineLogoFile').files[0];if(file){if(file.size>2*1024*1024)throw Error(mt('画像は2MBまでです'));const body=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const asset=await post('/api/assets',{airport:$('airport').value,name:code+' logo',kind:'logo',body});data.logo=asset.digest;}await post('/api/airline-names',{airport:$('airport').value,code,names:data});$('airlineLogoFile').value='';$('message').textContent=mt('航空会社名を保存しました。');}catch(error){$('message').textContent=error.message;}};$('airport').addEventListener('change',()=>$('airlineCodeForm').reset());window.addEventListener('managerlanguagechange',refreshAirlineCodes);}

@@ -1,11 +1,21 @@
 """Separate read-only LAN feed; the management UI stays on localhost."""
 import json
+import logging
 from urllib.parse import parse_qs, urlparse
 
 from .__main__ import ROOT, handler
 
 
-def manager_handler(store, security, upstream=None, os_clock=None):
+def manager_handler(store, security, upstream=None, os_clock=None, terminal_security=None, terminal_source=""):
+    terminal_security = terminal_security or security
+    if terminal_security.config()["airport"] != security.config()["airport"]:
+        raise ValueError("Manager and terminal credentials airport must match")
+    from .backup import Backups, MAX_BYTES, inspect_archive, private
+    import sqlite3
+    import zipfile
+    import uuid
+    import re
+    backups=Backups(store,security,upstream)
     class ManagerHandler(handler(store, upstream, os_clock)):
         def do_GET(self):
             path = urlparse(self.path).path
@@ -24,8 +34,20 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.end_headers()
                 return
             identity=security.identity(self.headers)
-            if path in ('/api/users','/api/audit','/api/audit-settings','/api/clock') and identity['role']!='admin':
+            if path in ('/api/terminal-connections','/api/assets/catalog','/api/users','/api/audit','/api/audit-settings','/api/clock','/api/backups','/api/backups/download','/backup-guide') and identity['role']!='admin':
                 return self.send(403,{'error':'Administrator access required'})
+            if path in ('/api/backups','/api/backups/download'):
+                try:
+                    if path=='/api/backups':return self.send(200,backups.status())
+                    identifier=parse_qs(urlparse(self.path).query).get('id',[''])[0]
+                    return self.send(200,backups.path(identifier).read_bytes(),'application/zip')
+                except (ValueError,OSError):
+                    if path=='/api/backups':
+                        logging.exception('Backup listing failed')
+                        return self.send(500,{'error':'Unable to load backup list. Saved backups have not been deleted.'})
+                    return self.send(400,{'error':'Backup not found'})
+            if path=='/api/terminal-connections':
+                return self.send(200, {'source':terminal_source,'issued':list(terminal_security.config()['terminals'])})
             if path=='/api/users':
                 return self.send(200,security.listing())
             if path=='/api/audit':
@@ -36,13 +58,39 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                     cursor=query.get('beforeId',[None])[0]
                     return self.send(200,store.audit_records(airport,int(cursor) if cursor else None))
                 except ValueError as error:return self.send(400,{'error':str(error)})
-            scoped_paths = ('/api/audit-settings','/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
+            scoped_paths = ('/api/assets/catalog','/api/audit-settings','/api/airport-names', '/api/clock', '/api/registry', '/api/state', '/api/assets', '/api/feed', '/api/display', '/api/upstream', '/asset', '/display')
             airport = parse_qs(urlparse(self.path).query).get('airport', ['SHI'])[0] if path in scoped_paths else security.config()['airport']
             if airport != security.config()['airport']:
                 return self.send(403, {'error':'Airport access denied'})
             return super().do_GET()
 
         def do_POST(self):
+            if self.path=='/api/backups/upload':
+                origin=self.headers.get('Origin')
+                if origin and origin!='http://'+self.headers.get('Host',''):return self.send(403,{'error':'Invalid origin'})
+                identity=security.identity(self.headers)
+                if not identity:return self.send(401,{'error':'Please sign in'})
+                if identity['role']!='admin':return self.send(403,{'error':'Administrator access required'})
+                if self.headers.get('Content-Type')!='application/zip':return self.send(415,{'error':'ZIP required'})
+                path=None
+                try:
+                    size=int(self.headers.get('Content-Length','0'))
+                    if not 0<size<=MAX_BYTES:raise ValueError('Backup is too large or empty')
+                    identifier=uuid.uuid4().hex
+                    path=backups.root/(identifier+'.upload')
+                    private(path,b'')
+                    remaining=size
+                    with path.open('wb') as file:
+                        while remaining:
+                            block=self.rfile.read(min(1024*1024,remaining))
+                            if not block:raise ValueError('Incomplete upload')
+                            file.write(block);remaining-=len(block)
+                    result=inspect_archive(path,security.config()['airport'])
+                    with store.as_actor(identity):store.record_audit(security.config()['airport'],'backup.inspect',identifier,None,{'createdAt':result['createdAt']})
+                    return self.send(200,{'id':identifier,**result})
+                except (ValueError,OSError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,AttributeError):
+                    if path:path.unlink(missing_ok=True)
+                    return self.send(400,{'error':'Backup validation failed. Check the file, airport and software version.'})
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 return self.send(415, {'error':'JSON required'})
             origin = self.headers.get('Origin')
@@ -83,7 +131,7 @@ def manager_handler(store, security, upstream=None, os_clock=None):
                 self.wfile.write(b'{}')
                 return
             identity=security.identity(self.headers)
-            operator_paths={'/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/check','/api/upstream/import','/api/signage'}
+            operator_paths={'/api/flights','/api/flights/update','/api/flights/delete','/api/publish','/api/upstream/check','/api/upstream/import','/api/signage','/api/schedules/csv/preview','/api/schedules/csv/import'}
             if identity['role']!='admin' and self.path not in operator_paths:
                 return self.send(403,{'error':'Administrator access required'})
             # Inspect airport before the existing write handler consumes the body.
@@ -91,13 +139,36 @@ def manager_handler(store, security, upstream=None, os_clock=None):
             original = self.rfile
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= (3*1024*1024 if self.path == '/api/assets' else 16384):
+                if not 0 < size <= (3*1024*1024 if self.path == '/api/assets' else 262144 if self.path.startswith('/api/schedules/csv/') else 16384):
                     raise ValueError('Invalid request size')
                 body = original.read(size)
                 if json.loads(body).get('airport') != security.config()['airport']:
                     return self.send(403, {'error':'Airport access denied'})
                 data=json.loads(body)
                 with store.as_actor(identity):
+                    if self.path in ('/api/backups/create','/api/backups/prepare'):
+                        try:
+                            if self.path.endswith('/create'):
+                                result=backups.create()
+                                store.record_audit(security.config()['airport'],'backup.create',result['id'],None,{'createdAt':result['createdAt']})
+                            else:
+                                identifier=data.get('id')
+                                if not isinstance(identifier,str) or not re.fullmatch('[a-f0-9]{32}',identifier):raise ValueError('Invalid backup ID')
+                                source=backups.root/(identifier+'.upload')
+                                target=backups.root/('recovery-'+identifier)
+                                result=inspect_archive(source,security.config()['airport'],target)
+                                result['folder']=str(target)
+                                store.record_audit(security.config()['airport'],'backup.prepare',identifier,None,{'createdAt':result['createdAt']})
+                            return self.send(200,result)
+                        except (ValueError,OSError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,AttributeError):return self.send(400,{'error':'Backup or recovery preparation failed. Live data was not replaced.'})
+                    if self.path=='/api/terminal-connections/issue':
+                        from .registry import listing
+                        display_id=data.get('displayId')
+                        if display_id not in {item['displayId'] for item in listing(store,data['airport'])['terminals']}:
+                            raise ValueError('Save the terminal registration first')
+                        connection,replaced=terminal_security.issue_connection(display_id,data.get('source'),data.get('replace',False))
+                        store.record_audit(data['airport'],'terminal.connection.reissue' if replaced else 'terminal.connection.issue',display_id,None,{'source':connection['source']})
+                        return self.send(200,connection)
                     if self.path=='/api/users':
                         before,after=security.change_user(data)
                         store.record_audit(security.config()['airport'],'user.'+data['action'],data['username'],before,after)

@@ -20,14 +20,26 @@
  function visible(flights,direction,control={},now=Date.now()){
   const key=direction==='arrival'?'arrivalHideMinutes':'departureHideMinutes';
   const value=control[key];const minutes=Number.isInteger(value)&&value>=0&&value<=10080?value:(direction==='arrival'?120:10);
-  return flights.filter(flight=>(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
+  const opening=control.board?.[direction+'ShowMinutes'];
+  const started=flight=>Number.isInteger(opening)?now>=timestamp(flight.serviceDate,flight.time)-opening*minute:flight.serviceDate<=today(now);
+  const traffic=control.board?.traffic||'all';
+  const matches=flight=>traffic==='all'||flight.geo===(traffic==='domestic'?'DOM':'INTL');
+  return flights.filter(flight=>matches(flight)&&started(flight)&&(flight.direction||'departure')===direction&&Number.isFinite(effective(flight))&&now<deadline(flight,minutes))
    .sort((a,b)=>effective(a)-effective(b)||a.flightNumber.localeCompare(b.flightNumber));
  }
- const columns=['scheduled','estimated','destination','airline','flight','gate','remark'];
- function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)):[...columns];}
+ const columns=['scheduled','estimated','destination','airline','flight','gate','belt','remark'];
+ function selectedColumns(config,direction){const chosen=config?.[direction+'Columns'];return Array.isArray(chosen)&&chosen.length?columns.filter(x=>chosen.includes(x)&&(direction==='arrival'||x!=='belt')):columns.filter(x=>x!=='belt');}
  function synchronizedClock(utcNow,wallNow=Date.now(),monotonicNow=0){const epoch=Date.parse(utcNow);if(!Number.isFinite(epoch))throw Error('Invalid clock');return {now:mono=>epoch+mono-monotonicNow,offset:epoch-wallNow};}
  function language(config,now=Date.now()){const languages=config?.languages?.length?config.languages:['en','ja'];const interval=config?.languageInterval||8;return languages[Math.floor(now/1000/interval)%languages.length];}
- const api={language,configureTimezone,synchronizedClock,today,timestamp,effective,deadline,visible,columns,selectedColumns};
+ function codeshareNumber(flight,config={},now=Date.now()){
+  const operating=flight.flightNumber;
+  if(config?.codeshareEnabled===false)return operating;
+  const shares=Array.isArray(flight.codeshareFlights)?flight.codeshareFlights:[];
+  const numbers=[...new Set([operating,...shares])];
+  const interval=Number.isInteger(config?.codeshareInterval)&&config.codeshareInterval>=3&&config.codeshareInterval<=60?config.codeshareInterval:5;
+  return numbers[Math.floor(now/1000/interval)%numbers.length];
+ }
+ const api={codeshareNumber,language,configureTimezone,synchronizedClock,today,timestamp,effective,deadline,visible,columns,selectedColumns};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  else root.BoardPolicy=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -1,15 +1,19 @@
 import json
 import re
-COLUMNS=('scheduled','estimated','destination','airline','flight','gate','remark')
+COLUMNS=('scheduled','estimated','destination','airline','flight','gate','belt','remark')
 
 def validate(data):
     if data is None:return None
     if not isinstance(data,dict) or data.get('direction') not in ('departure','arrival'):
         raise ValueError('Select departure or arrival')
     result={'direction':data['direction']}
+    for key,default,choices in [('traffic','all',('all','domestic','international')),('orientation','landscape',('landscape','portrait'))]:
+        value=data.get(key,default)
+        if value not in choices:raise ValueError('Invalid '+key+' display setting')
+        if key in data:result[key]=value
     for key in ('departureColumns','arrivalColumns'):
-        columns=data.get(key,list(COLUMNS))
-        if not isinstance(columns,list) or not columns or any(x not in COLUMNS for x in columns) or len(set(columns))!=len(columns):
+        columns=data.get(key,[x for x in COLUMNS if x!='belt'])
+        if not isinstance(columns,list) or not columns or any(x not in COLUMNS or (key=='departureColumns' and x=='belt') for x in columns) or len(set(columns))!=len(columns):
             raise ValueError('Select at least one valid display column')
         result[key]=[x for x in COLUMNS if x in columns]
     logo=data.get('logo','')
@@ -20,6 +24,18 @@ def validate(data):
     if type(interval) is not int or not 3<=interval<=60:raise ValueError('Language interval must be 3 to 60 seconds')
     result['languages']=languages
     result['languageInterval']=interval
+    if 'codeshareEnabled' in data:
+        if type(data['codeshareEnabled']) is not bool:raise ValueError('Invalid codeshare display setting')
+        result['codeshareEnabled']=data['codeshareEnabled']
+    if 'codeshareInterval' in data:
+        interval=data['codeshareInterval']
+        if type(interval) is not int or not 3<=interval<=60:raise ValueError('Codeshare interval must be 3 to 60 seconds')
+        result['codeshareInterval']=interval
+    for key in ('departureShowMinutes','arrivalShowMinutes'):
+        if key in data:
+            value=data[key]
+            if value is not None and (type(value) is not int or not 0<=value<=10080):raise ValueError('Display start must be 0 to 10080 minutes or blank')
+            result[key]=value
     result['logo']=logo
     return result
 
