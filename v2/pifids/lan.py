@@ -226,6 +226,10 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
 
 
 def feed_handler(store, security, download_directory=None):
+    if download_directory is None:
+        bundled = ROOT.parents[1] / 'downloads'
+        if bundled.is_dir():
+            download_directory = bundled
     packages = display_packages(download_directory)
     class FeedHandler(handler(store)):
         def do_POST(self):
