@@ -12,6 +12,7 @@ sys.argv = ['pifids', '--database', str(root / 'data' / 'manager.sqlite'),
             '--site-config', str(root / 'data' / 'site.json'),
             '--auth-config', str(root / 'data' / 'lan-auth.json'),
             '--terminal-source', 'http://'+site['lanAddress']+':8805',
+            '--download-directory', str(root / 'downloads'),
             '--port', '8800', '--lan-port', '8805', '--lan-host', site['lanAddress']]
 if (root / 'data' / 'web-connection.json').exists():
     sys.argv += ['--upstream-config', str(root / 'data' / 'web-connection.json')]

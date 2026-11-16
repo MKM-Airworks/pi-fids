@@ -20,6 +20,7 @@ $user=$identity.Name
 & icacls.exe "$root\data" /inheritance:r /grant:r "${user}:(OI)(CI)F" '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' | Out-Null
 if($LASTEXITCODE -ne 0){throw 'Could not protect management settings'}
 Copy-Item "$PSScriptRoot\runtime","$PSScriptRoot\v2" $root -Recurse -Force
+if(Test-Path "$PSScriptRoot\downloads"){Copy-Item "$PSScriptRoot\downloads" $root -Recurse -Force}
 Copy-Item "$PSScriptRoot\Run-Manager.pyw","$PSScriptRoot\Open-Manager.ps1","$PSScriptRoot\Prepare-Display.ps1","$PSScriptRoot\Prepare-Display.cmd" $root -Force
 & "$PSScriptRoot\runtime\python.exe" "$PSScriptRoot\Initialize-Manager.py" --root $root --airport $Airport --timezone $Timezone --lan-address $LanAddress
 if($LASTEXITCODE -ne 0){throw 'Could not initialize management data'}

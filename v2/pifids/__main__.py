@@ -187,6 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--terminal-source', default='', help='LAN feed origin prefilled for terminal connections')
     parser.add_argument('--upstream-config', help='Private MKM Flight Web connection JSON')
     parser.add_argument('--clock-service', help='Private loopback Windows OS clock helper connection JSON')
+    parser.add_argument('--download-directory', type=Path, help='Directory of credential-free display installers')
     parser.add_argument('--lan-port', type=int, help='Enable separate read-only LAN feed (requires auth configuration)')
     parser.add_argument('--lan-host', default='0.0.0.0', help='Address for the read-only LAN feed only')
     args = parser.parse_args()
@@ -236,7 +237,7 @@ if __name__ == '__main__':
     ThreadingHTTPServer.request_queue_size=64
     server = ThreadingHTTPServer(('127.0.0.1', args.port), management)
     if args.lan_port:
-        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, terminal_security if args.auth_config else security))
+        lan_server = ThreadingHTTPServer((args.lan_host, args.lan_port), feed_handler(store, terminal_security if args.auth_config else security, args.download_directory))
         threading.Thread(target=lan_server.serve_forever, daemon=True).start()
         print('Read-only LAN feed on port %s (terminal credentials required)' % args.lan_port, flush=True)
     print('Pi-FIDS V2 prototype: http://127.0.0.1:%s' % args.port, flush=True)

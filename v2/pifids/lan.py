@@ -4,6 +4,7 @@ import logging
 from urllib.parse import parse_qs, urlparse
 
 from .__main__ import ROOT, handler
+from .downloads import display_packages, serve_display_download
 from .seasonal_editor import SeasonalEditor
 from .seasonal_csv import template as seasonal_csv_template
 from .store import DraftConflict
@@ -224,13 +225,16 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
     return ManagerHandler
 
 
-def feed_handler(store, security):
+def feed_handler(store, security, download_directory=None):
+    packages = display_packages(download_directory)
     class FeedHandler(handler(store)):
         def do_POST(self):
             self.send(405, {'error':'LAN feed is read-only'})
 
         def do_GET(self):
             url = urlparse(self.path)
+            if serve_display_download(self, url.path, packages):
+                return
             if url.path not in ('/api/feed', '/asset'):
                 return self.send(404, {'error':'LAN feed has no management UI or draft API'})
             identity = security.terminal(self.headers)
