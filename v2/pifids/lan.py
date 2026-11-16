@@ -1,4 +1,5 @@
 """Separate read-only LAN feed; the management UI stays on localhost."""
+import html as html_tools
 import json
 import logging
 from urllib.parse import parse_qs, urlparse
@@ -8,6 +9,7 @@ from .downloads import display_packages, serve_display_download
 from .seasonal_editor import SeasonalEditor
 from .seasonal_csv import template as seasonal_csv_template
 from .store import DraftConflict
+from .security import validate_source
 
 
 def manager_handler(store, security, upstream=None, os_clock=None, terminal_security=None, terminal_source=""):
@@ -50,6 +52,11 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
                 html=html.replace('<h2>便の管理</h2>','<h2>当日便の管理</h2>',1)
                 anchor='<div id="seasonalCsvPreview">'
                 html=html.replace(anchor,'<p><a href="/downloads/seasonal-schedule-template.csv">CSVテンプレートをダウンロード / Download CSV template</a></p>'+anchor,1)
+                if terminal_source:
+                    url = html_tools.escape(validate_source(terminal_source) + '/downloads', quote=True)
+                    anchor = '<div id="settingsTerminalList"'
+                    link = f'<p><a class="outline-link" href="{url}" target="_blank" rel="noopener">表示端末アプリの配布ページを開く</a></p>'
+                    html=html.replace(anchor,link+anchor,1)
                 role='admin' if identity['role']=='admin' else 'operator'
                 html=html.replace('</body>',f'<script src="/static/seasonal.js" data-role="{role}"></script></body>')
                 return self.send(200,html.encode(),'text/html; charset=utf-8')
