@@ -1,0 +1,20 @@
+.demo-flight-tabs {
+  display: flex;
+  gap: .5rem;
+  margin-block-end: 1rem;
+}
+
+.demo-flight-tabs[hidden] {
+  display: none;
+}
+
+.demo-flight-tabs button[aria-pressed="false"] {
+  color: #28445c;
+  background: #fff;
+  border: 1px solid #a6bbcd;
+}
+
+.demo-flight-tabs button[aria-pressed="true"] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 #83c7f1;
+}

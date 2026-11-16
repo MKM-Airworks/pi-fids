@@ -88,6 +88,8 @@ def build(*, start_daily=False):
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if path == '/static/demo-seasonal.css':
+                return self.send(200,(ROOT/'demo-seasonal.css').read_bytes(),'text/css; charset=utf-8')
             if path == '/static/demo-seasonal.js':
                 return self.send(200,(ROOT/'demo-seasonal.js').read_bytes(),'text/javascript; charset=utf-8')
             if path == '/' and security.session(self.headers):
@@ -96,8 +98,11 @@ def build(*, start_daily=False):
                 anchor = '<div id="seasonalCsvPreview">'
                 link = '<p><a href="/downloads/seasonal-schedule-template.csv">CSVテンプレートをダウンロード / Download CSV template</a></p>'
                 html = html.replace(anchor, link + anchor, 1)
-                if identity and identity['role']=='admin':
-                    html = html.replace('</body>','<script src="/static/demo-seasonal.js"></script></body>')
+                role = 'admin' if identity and identity['role']=='admin' else 'operator'
+                styles = '<link rel="stylesheet" href="/static/manager.css">'
+                html = html.replace(styles, styles + '<link rel="stylesheet" href="/static/demo-seasonal.css">', 1)
+                html = html.replace('<h2>便の管理</h2>','<h2>当日便の管理</h2>',1)
+                html = html.replace('</body>',f'<script src="/static/demo-seasonal.js" data-role="{role}"></script></body>')
                 return self.send(200,html.encode(),'text/html; charset=utf-8')
             if path == '/api/demo-seasonal':
                 identity = security.identity(self.headers)

@@ -1,7 +1,9 @@
 (() => {
   const daily = document.querySelector('#flightPage');
+  daily.append(...['flightsPanel','csvPanel','upstreamPanel'].map(id => document.getElementById(id)));
+  if (document.currentScript.dataset.role !== 'admin') return;
   const heading = document.createElement('nav');
-  heading.className = 'form-actions';
+  heading.className = 'demo-flight-tabs';
   heading.setAttribute('aria-label', 'フライト情報の種類');
   heading.innerHTML = '<button type="button">日別フライト</button> <button type="button">シーズンダイヤ</button>';
   daily.before(heading);
@@ -104,11 +106,23 @@
     }
   }
 
-  dayButton.onclick = () => { panel.hidden = true; daily.hidden = false; };
-  seasonButton.onclick = () => { daily.hidden = true; panel.hidden = false; status.textContent = ''; load(); };
+  function selectTab(isSeasonal) {
+    panel.hidden = !isSeasonal;
+    daily.hidden = isSeasonal;
+    dayButton.setAttribute('aria-pressed', String(!isSeasonal));
+    seasonButton.setAttribute('aria-pressed', String(isSeasonal));
+  }
+
+  dayButton.onclick = () => selectTab(false);
+  seasonButton.onclick = () => {
+    selectTab(true);
+    status.textContent = '';
+    load();
+  };
   function resetTabs() {
     panel.hidden = true;
     heading.hidden = Boolean(location.hash && location.hash !== '#flightsPanel');
+    if (!heading.hidden) selectTab(false);
   }
   addEventListener('hashchange', resetTabs);
   resetTabs();
