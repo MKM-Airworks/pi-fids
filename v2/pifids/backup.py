@@ -40,6 +40,8 @@ def expected_schema(directory):
     init_tables(store)
     from .daily import init_tables as init_daily
     init_daily(store)
+    from .seasonal_editor import init_editor_tables
+    init_editor_tables(store)
     with store.connect() as db:
         return schema(db),required
 

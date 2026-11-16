@@ -4,13 +4,39 @@ import hashlib
 import io
 import json
 import re
-from datetime import date, timedelta
+from datetime import date
 from . import sites
 from .store import DraftConflict
 from .upstream import project
+from .operating_weeks import overlap, validate_weeks
 
 MAX_BYTES=128*1024
-FIELDS={'carrier','number','movement','origin','destination','geo','validFrom','validTo','daysText','time','sta','codeshares'}
+COLUMNS=('carrier','number','movement','origin','destination','geo','validFrom','validTo','daysText','time','sta','codeshares','weeksText')
+FIELDS=set(COLUMNS)
+GUIDE_PREFIX='# '
+GUIDE=(
+    '# シーズンダイヤCSV / Seasonal schedule CSV',
+    '# この案内と空行は読み飛ばします / Guide lines and blank lines before the header are skipped.',
+    '# 見出しを残し次の行から入力 / Keep the header and enter schedules beneath it.',
+    '# carrier: 航空会社コード / airline code (HB). number: 便番号 / flight number (8235).',
+    '# movement: DEP=出発/departure; ARR=到着/arrival. origin/destination: 空港3文字 / airport codes.',
+    '# geo: DOM=国内/domestic; INTL=国際/international.',
+    '# validFrom/validTo: YYYY-MM-DD. daysText: 1=月/Mon … 7=日/Sun (15=月・金/Mon and Fri).',
+    '# time: 出発定刻 / STD; sta: 到着定刻 / STA. HH:MM. codeshares: 便名をセミコロンで区切る / separate flight numbers with semicolons.',
+    '# weeksText: 月内の週（日曜始まり・月初を含む週が第1週） / Sunday-start calendar weeks; blank = every week.',
+    '# 入力例 / Example: HB,8235,ARR,HKG,ROR,INTL,2026-11-01,2026-11-30,15,,19:45,,135',
+    '# 入力例 / Example: HB,8236,DEP,ROR,HKG,INTL,2026-11-01,2026-11-30,3,20:45,,,24',
+    '# 日付指定便は開始日と終了日を同じ日に / For a date-specific flight use the same start and end date.',
+)
+
+
+def template():
+    buffer=io.StringIO()
+    for line in GUIDE:
+        buffer.write(line+'\r\n')
+    csv.writer(buffer).writerow(COLUMNS)
+    return buffer.getvalue().encode('utf-8-sig')
+
 
 def init_tables(store):
     with store.connect() as db:
@@ -19,8 +45,12 @@ def init_tables(store):
 def parse(text,airport,zone):
     sites.airport_code(airport);sites.timezone_name(zone)
     if not isinstance(text,str) or not 0<len(text.encode('utf-8'))<=MAX_BYTES:raise ValueError('CSV must be UTF-8 and at most 128 KB')
-    reader=csv.DictReader(io.StringIO(text.lstrip('\ufeff')),strict=True)
-    if set(reader.fieldnames or [])!=FIELDS or len(reader.fieldnames)!=len(FIELDS):raise ValueError('Use the MKM Flight Web seasonal CSV columns')
+    lines=text.lstrip('\ufeff').splitlines(keepends=True)
+    first_data=0
+    while first_data<len(lines) and (not lines[first_data].strip() or lines[first_data].startswith(GUIDE_PREFIX)):
+        first_data+=1
+    reader=csv.DictReader(io.StringIO(''.join(lines[first_data:])),strict=True)
+    if not reader.fieldnames or set(reader.fieldnames) not in (FIELDS, FIELDS-{'weeksText'}) or len(set(reader.fieldnames))!=len(reader.fieldnames):raise ValueError('Use the MKM Flight Web seasonal CSV columns')
     flights=[];groups={}
     try:
         for line,row in enumerate(reader,2):
@@ -38,14 +68,16 @@ def parse(text,airport,zone):
             time=row['time'] if direction=='departure' else row['sta']
             if not re.fullmatch('(?:[01][0-9]|2[0-3]):[0-5][0-9]',time):raise ValueError('Invalid scheduled time')
             days=sorted(map(int,row['daysText']))
+            weeks=validate_weeks(row.pop('weeksText',''))
+            if weeks:row['weeksText']=weeks
+            rule={'operatingDays':days,'weeksText':weeks}
             number=row['carrier']+row['number']
             for prior in groups.get((direction,number),[]):
                 first=max(start,date.fromisoformat(prior['validFrom']));last=min(end,date.fromisoformat(prior['validTo']))
-                shared=set(days)&set(prior['operatingDays'])
-                if first<=last and any((first+timedelta(days=i)).isoweekday() in shared for i in range(min(7,(last-first).days+1))):raise ValueError('Overlapping schedules for '+number)
-            flight={'id':'csv-'+hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest()[:32],'flightNumber':number,'airlineCode':row['carrier'],'direction':direction,'origin':row['origin'],'destination':row['destination'],'validFrom':row['validFrom'],'validTo':row['validTo'],'operatingDays':days,'scheduledTime':time,'status':'NA','timeStatus':'','boardingStatus':'','codeshares':row['codeshares'],'geo':row['geo']}
+                if first<=last and overlap(rule,prior,first,last):raise ValueError('Overlapping schedules for '+number)
+            flight={'id':'csv-'+hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest()[:32],'flightNumber':number,'airlineCode':row['carrier'],'direction':direction,'origin':row['origin'],'destination':row['destination'],'validFrom':row['validFrom'],'validTo':row['validTo'],**rule,'scheduledTime':time,'status':'NA','timeStatus':'','boardingStatus':'','codeshares':row['codeshares'],'geo':row['geo']}
             flights.append(flight);groups.setdefault((direction,number),[]).append(flight)
-    except (csv.Error,ValueError) as error:raise ValueError('CSV row '+str(reader.line_num)+': '+str(error)) from None
+    except (csv.Error,ValueError) as error:raise ValueError('CSV row '+str(first_data+reader.line_num)+': '+str(error)) from None
     if not flights:raise ValueError('CSV has no schedules')
     return {'organizationId':'local-csv','airportId':airport,'product':'pi-fids','stationAirport':airport,'timezone':zone,'coverage':{'from':min(r['validFrom'] for r in flights),'to':max(r['validTo'] for r in flights)},'flights':flights}
 

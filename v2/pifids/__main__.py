@@ -247,6 +247,11 @@ if __name__ == '__main__':
             threading.Event().wait(60)
     threading.Thread(target=audit_cleanup,name='Audit retention',daemon=True).start()
     from .daily import DailySchedules
-    DailySchedules(store).start()
+    if args.auth_config:
+        from .seasonal_editor import SeasonalEditor
+        editor=SeasonalEditor(store,store.installed_airport,upstream)
+        DailySchedules(store,editor.for_rollover).start()
+    else:
+        DailySchedules(store).start()
     if upstream:upstream.start()
     server.serve_forever()

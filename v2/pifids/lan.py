@@ -4,6 +4,9 @@ import logging
 from urllib.parse import parse_qs, urlparse
 
 from .__main__ import ROOT, handler
+from .seasonal_editor import SeasonalEditor
+from .seasonal_csv import template as seasonal_csv_template
+from .store import DraftConflict
 
 
 def manager_handler(store, security, upstream=None, os_clock=None, terminal_security=None, terminal_source=""):
@@ -16,6 +19,7 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
     import uuid
     import re
     backups=Backups(store,security,upstream)
+    editor=SeasonalEditor(store,security.config()['airport'],upstream)
     class ManagerHandler(handler(store, upstream, os_clock)):
         def do_GET(self):
             path = urlparse(self.path).path
@@ -23,6 +27,10 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
                 return self.send(200, (ROOT/'templates/login.html').read_bytes(), 'text/html; charset=utf-8')
             if path == '/api/session':
                 return self.send(200, {'authenticated':security.session(self.headers), 'airport':security.config()['airport'], 'secured':True,'user':security.identity(self.headers),'setupRequired':security.setup_required()})
+            if path in ('/static/seasonal.js','/static/seasonal.css'):
+                name = path.rsplit('/',1)[-1]
+                return self.send(200,(ROOT/'static'/name).read_bytes(),
+                                 'text/css' if name.endswith('.css') else 'text/javascript')
             if path.startswith('/static/'):
                 return super().do_GET()
             if not security.session(self.headers):
@@ -34,6 +42,33 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
                 self.end_headers()
                 return
             identity=security.identity(self.headers)
+            if path == '/':
+                html=(ROOT/'templates/manager.html').read_text(encoding='utf-8')
+                style='<link rel="stylesheet" href="/static/manager.css">'
+                html=html.replace(style,style+'<link rel="stylesheet" href="/static/seasonal.css">',1)
+                html=html.replace('<h2>便の管理</h2>','<h2>当日便の管理</h2>',1)
+                anchor='<div id="seasonalCsvPreview">'
+                html=html.replace(anchor,'<p><a href="/downloads/seasonal-schedule-template.csv">CSVテンプレートをダウンロード / Download CSV template</a></p>'+anchor,1)
+                role='admin' if identity['role']=='admin' else 'operator'
+                html=html.replace('</body>',f'<script src="/static/seasonal.js" data-role="{role}"></script></body>')
+                return self.send(200,html.encode(),'text/html; charset=utf-8')
+            if path == '/downloads/seasonal-schedule-template.csv':
+                body=seasonal_csv_template()
+                self.send_response(200)
+                self.send_header('Content-Type','text/csv; charset=utf-8')
+                self.send_header('Content-Disposition','attachment; filename="Pi-FIDS-Seasonal-Schedule.csv"')
+                self.send_header('Content-Length',str(len(body)))
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == '/api/seasonal':
+                if identity['role'] != 'admin':
+                    return self.send(403,{'error':'Administrator access required'})
+                try:
+                    return self.send(200,editor.listing())
+                except ValueError as error:
+                    return self.send(400,{'error':str(error)})
             if path in ('/api/terminal-connections','/api/assets/catalog','/api/users','/api/audit','/api/audit-settings','/api/clock','/api/backups','/api/backups/download','/backup-guide') and identity['role']!='admin':
                 return self.send(403,{'error':'Administrator access required'})
             if path in ('/api/backups','/api/backups/download'):
@@ -146,6 +181,13 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
                     return self.send(403, {'error':'Airport access denied'})
                 data=json.loads(body)
                 with store.as_actor(identity):
+                    if self.path in ('/api/seasonal/preview','/api/seasonal/save'):
+                        try:
+                            return self.send(200,editor.change(data,save=self.path.endswith('/save')))
+                        except DraftConflict as error:
+                            return self.send(409,{'error':str(error)})
+                        except (ValueError, KeyError, TypeError) as error:
+                            return self.send(400,{'error':str(error)})
                     if self.path in ('/api/backups/create','/api/backups/prepare'):
                         try:
                             if self.path.endswith('/create'):
