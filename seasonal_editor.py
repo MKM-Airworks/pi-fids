@@ -4,11 +4,12 @@ import json
 from datetime import date, timedelta
 
 from pifids.seasonal_csv import init_tables
+from pifids.operating_weeks import overlap, validate_weeks
 from pifids.store import DraftConflict
 from pifids.upstream import SCOPE, contract, local_date, project, schema_check, verify
 
 FIELDS = ('flightNumber', 'origin', 'destination', 'validFrom', 'validTo',
-          'operatingDays', 'scheduledTime')
+          'operatingDays', 'scheduledTime', 'weeksText')
 
 
 class SeasonalEditor:
@@ -86,10 +87,13 @@ class SeasonalEditor:
             fields = data.get('fields')
             if flight is None or not isinstance(fields, dict) or set(fields) != set(FIELDS):
                 raise ValueError('編集する便と項目を確認してください。')
-            changed = {**flight, **fields}
             item_schema = contract({'product': 'pi-fids'}, 'release')['properties']['flights']['items']
             for field, value in fields.items():
-                schema_check(value, item_schema['properties'][field])
+                if field == 'weeksText':
+                    fields[field] = validate_weeks(value)
+                else:
+                    schema_check(value, item_schema['properties'][field])
+            changed = {**flight, **fields}
             if (not changed['flightNumber'].startswith(flight['airlineCode'])
                     or changed['origin' if flight['direction']=='departure' else 'destination'] != self.airport
                     or not original['coverage']['from'] <= changed['validFrom'] <= changed['validTo'] <= original['coverage']['to']):
@@ -99,9 +103,7 @@ class SeasonalEditor:
                     continue
                 start = date.fromisoformat(max(other['validFrom'], changed['validFrom']))
                 end = date.fromisoformat(min(other['validTo'], changed['validTo']))
-                shared = set(changed['operatingDays']) & set(other['operatingDays'])
-                if any((start+timedelta(days=i)).isoweekday() in shared
-                       for i in range(min(7, (end-start).days+1))):
+                if start <= end and overlap(changed, other, start, end):
                     raise ValueError('同一便の運航日が重複しています。')
             candidate = {**merged, 'flights': [changed if r['id']==key else r for r in merged['flights']]}
             preview_date = data.get('serviceDate')
@@ -109,7 +111,7 @@ class SeasonalEditor:
                 raise ValueError('プレビュー日は適用開始日以降を指定してください。')
             rows = project(candidate, preview_date)
             if save:
-                changes = {k:v for k,v in fields.items() if v != flight[k]}
+                changes = {k:v for k,v in fields.items() if v != flight.get(k, '')}
                 db.execute('INSERT OR REPLACE INTO demo_seasonal_edits VALUES (?,?,?,?,?)',
                            (source, key, day, json.dumps(flight), json.dumps(changes)))
                 self.store.audit(db, self.airport, 'schedule.seasonal-edit',

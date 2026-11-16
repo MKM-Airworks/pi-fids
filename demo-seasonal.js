@@ -13,7 +13,7 @@
     <p>保存した変更はパラオ現地日付の次回の日次展開から反映されます。</p>
     <p id="seasonal-summary"></p>
     <div style="overflow-x:auto"><table aria-label="保存済みシーズンダイヤ">
-      <thead><tr><th>便名</th><th>出発／到着</th><th>出発地</th><th>到着地</th><th>適用開始</th><th>適用終了</th><th>運航曜日</th><th>定刻</th><th>操作</th></tr></thead>
+      <thead><tr><th>便名</th><th>出発／到着</th><th>出発地</th><th>到着地</th><th>適用開始</th><th>適用終了</th><th>運航曜日</th><th>月内の運航週</th><th>定刻</th><th>操作</th></tr></thead>
       <tbody id="seasonal-schedules"></tbody>
     </table></div>
     <form hidden aria-label="シーズンダイヤ編集">
@@ -23,6 +23,7 @@
       <label>適用開始日 <input name="validFrom" type="date" required></label>
       <label>適用終了日 <input name="validTo" type="date" required></label>
       <label>運航曜日（1＝月曜、7＝日曜） <input name="operatingDays" pattern="[1-7]{1,7}" required></label>
+      <label>月内の運航週（日曜始まり・空欄は毎週） <input name="weeksText" pattern="[1-6]{1,6}" placeholder="135"></label>
       <label>定刻 <input name="scheduledTime" type="time" required></label>
       <label>プレビュー運航日 <input name="serviceDate" type="date" required></label>
       <button type="submit" value="preview">プレビュー</button>
@@ -55,6 +56,7 @@
       form.elements[key].value = flight[key];
     }
     form.elements.operatingDays.value = flight.operatingDays.join('');
+    form.elements.weeksText.value = flight.weeksText || '';
     preview.replaceChildren();
   }
 
@@ -70,7 +72,7 @@
         const weekdays = flight.operatingDays.map(day => '月火水木金土日'[day-1]).join('・');
         const direction = flight.direction === 'arrival' ? '到着' : '出発';
         for (const value of [flight.flightNumber, direction, flight.origin, flight.destination,
-                             flight.validFrom, flight.validTo, weekdays, flight.scheduledTime]) {
+                             flight.validFrom, flight.validTo, weekdays, flight.weeksText || (flight.validFrom===flight.validTo ? '日付指定' : '毎週'), flight.scheduledTime]) {
           row.insertCell().textContent = value;
         }
         const edit = document.createElement('button');

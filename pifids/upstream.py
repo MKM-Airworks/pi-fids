@@ -149,13 +149,15 @@ def remark(flight):
     boarding = {'boarding':'Boarding','final_call':'Final call','gate_closed':'Gate closed'}.get(flight.get('boardingStatus'))
     return boarding or {'DP':'Departed','LD':'Arrived'}.get(flight.get('timeStatus'), {'DP':'Departed','LD':'Arrived'}.get(flight['status'],''))
 
+from .operating_weeks import operates
+
 def project(body, service_date):
     day = date.fromisoformat(service_date)
     if day.isoformat() != service_date or not body['coverage']['from'] <= service_date <= body['coverage']['to']:
         raise ValueError('Service date is outside Web coverage')
     rows = []
     for flight in body['flights']:
-        if flight['validFrom'] <= service_date <= flight['validTo'] and day.isoweekday() in flight['operatingDays']:
+        if flight['validFrom'] <= service_date <= flight['validTo'] and operates(flight, day):
             stable = json.dumps([*(body[key] for key in SCOPE), flight['id'], service_date],separators=(',',':'))
             row = validate({'serviceDate':service_date,'airport':body['stationAirport'],'flightNumber':flight['flightNumber'],'destination':flight['destination'] if flight.get('direction','departure')=='departure' else flight['origin'],'time':flight.get('scheduledTime',flight.get('scheduledDeparture')), 'direction':flight.get('direction','departure'),'geo':flight.get('geo',''),**({'codeshareFlights':flight.get('codeshareFlights',flight.get('codeshares',[]))} if flight.get('codeshareFlights') or flight.get('codeshares') else {}),'estimatedTime':flight.get('estimatedTime',''),'gate':flight.get('gate',''),'belt':flight.get('belt',flight.get('baggage_belt','')), 'remark':remark(flight)})
             rows.append({**row, 'id':hashlib.sha256(stable.encode()).hexdigest()[:32]})

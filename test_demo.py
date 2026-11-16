@@ -55,7 +55,7 @@ class TestDemo(unittest.TestCase):
                 self.assertIn(b'demo-seasonal.js', req('/', **auth)[1])
                 schedule = json.loads(raw_schedule)
                 from seasonal_editor import FIELDS
-                fields = {key:schedule['flights'][0][key] for key in FIELDS}
+                fields = {key:schedule['flights'][0].get(key, '') for key in FIELDS}
                 fields['scheduledTime'] = '20:00'
                 edit = dict(id='demo', revision=schedule['revision'], fields=fields, serviceDate=tomorrow)
                 self.assertEqual(req('/api/demo-seasonal/save', edit)[0], 403)
