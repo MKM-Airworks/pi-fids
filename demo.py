@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from pifids.daily import DailySchedules
 from pifids.seasonal_csv import template as seasonal_csv_template
-from pifids.downloads import display_package, serve_display_download
+from pifids.downloads import display_packages, serve_display_download
 from pifids.lan import manager_handler, feed_handler
 from pifids.security import Security, password_hash, write_private
 from pifids.store import Store, DraftConflict
@@ -52,7 +52,7 @@ def build(*, start_daily=False):
                                              product='pi-fids',stationAirport=AIRPORT,timezone=ZONE)))
     upstream = Upstream(store, config)
     editor = SeasonalEditor(store, AIRPORT, upstream)
-    package = display_package(ROOT / "dist")
+    packages = display_packages(ROOT / "dist")
     artwork = {}
     for mode, filename in [('counter','skymark-checkin-test.png'),('gate','skymark-gate-test.png')]:
         artwork[mode] = store.upload_asset(dict(airport=AIRPORT,name=filename,kind='signage',
@@ -74,7 +74,7 @@ def build(*, start_daily=False):
 
         def do_GET(self):
             path = urlsplit(self.path).path
-            if serve_display_download(self, path, package):
+            if serve_display_download(self, path, packages):
                 return
             if path == '/downloads/seasonal-schedule-template.csv':
                 if not security.session(self.headers):
@@ -98,6 +98,10 @@ def build(*, start_daily=False):
                 anchor = '<div id="seasonalCsvPreview">'
                 link = '<p><a href="/downloads/seasonal-schedule-template.csv">CSVテンプレートをダウンロード / Download CSV template</a></p>'
                 html = html.replace(anchor, link + anchor, 1)
+                if packages:
+                    anchor = '<div id="settingsTerminalList"'
+                    link = '<p><a class="outline-link" href="/downloads" target="_blank" rel="noopener">表示端末アプリの配布ページを開く</a></p>'
+                    html = html.replace(anchor, link + anchor, 1)
                 role = 'admin' if identity and identity['role']=='admin' else 'operator'
                 styles = '<link rel="stylesheet" href="/static/manager.css">'
                 html = html.replace(styles, styles + '<link rel="stylesheet" href="/static/demo-seasonal.css">', 1)

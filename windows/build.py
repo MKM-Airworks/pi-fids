@@ -1,7 +1,10 @@
-"""Build the two credential-free Windows x64 packages."""
+"""Build the credential-free Windows kits and Ubuntu display kit for Render."""
 import io
 from importlib.metadata import distribution
 from pathlib import Path
+import shutil
+import tarfile
+import tempfile
 import urllib.request
 import zipfile
 
@@ -12,12 +15,27 @@ RUNTIME_URL = f'https://www.python.org/ftp/python/{PYTHON}/python-{PYTHON}-embed
 OUTPUT = ROOT / 'dist'
 DISPLAY = f'Pi-FIDS-Display-{VERSION}-win-x64.zip'
 MANAGER = f'Pi-FIDS-Manager-{VERSION}-win-x64.zip'
+UBUNTU = f'Pi-FIDS-Display-{VERSION}-ubuntu'
+
+
+def ubuntu_display():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / UBUNTU
+        shutil.copytree(ROOT/'pifids', root/'v2/pifids',
+                        ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+        for filename in ('install.py','launch.py'):
+            shutil.copy2(ROOT/'ubuntu'/filename, root)
+        shutil.copy2(ROOT/'ubuntu/display.html', root/'START-HERE.html')
+        (root/'ROLE').write_text('display', encoding='utf-8')
+        with tarfile.open(OUTPUT/(UBUNTU+'.tar.gz'), 'w:gz') as archive:
+            archive.add(root, arcname=root.name)
 
 
 def build():
     import tzdata
 
     OUTPUT.mkdir(exist_ok=True)
+    ubuntu_display()
     with urllib.request.urlopen(RUNTIME_URL, timeout=60) as response:
         runtime_bytes = response.read()
     setup = ROOT / 'windows' / 'setup'
@@ -57,6 +75,7 @@ def build():
             archive.write(ROOT / 'windows' / f'{role}-guide.html', 'START-HERE.html')
             if role == 'manager':
                 archive.write(OUTPUT / DISPLAY, 'downloads/' + DISPLAY)
+                archive.write(OUTPUT / (UBUNTU+'.tar.gz'), 'downloads/' + UBUNTU + '.tar.gz')
         with zipfile.ZipFile(target) as archive:
             if archive.testzip() is not None or 'runtime/pythonw.exe' not in archive.namelist():
                 raise ValueError(f'Invalid Windows package: {target.name}')

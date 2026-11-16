@@ -2,7 +2,7 @@
 import json
 import logging
 import os
-from .downloads import display_package, serve_display_download
+from .downloads import display_packages, serve_display_download
 from urllib.parse import parse_qs, urlparse
 
 from .__main__ import ROOT, handler
@@ -186,14 +186,14 @@ def manager_handler(store, security, upstream=None, os_clock=None, terminal_secu
 
 def feed_handler(store, security):
     directory = os.environ.get("PIFIDS_DOWNLOAD_DIRECTORY")
-    package = display_package(directory) if directory else None
+    packages = display_packages(directory)
     class FeedHandler(handler(store)):
         def do_POST(self):
             self.send(405, {'error':'LAN feed is read-only'})
 
         def do_GET(self):
             url = urlparse(self.path)
-            if serve_display_download(self, url.path, package):
+            if serve_display_download(self, url.path, packages):
                 return
             if url.path not in ('/api/feed', '/asset'):
                 return self.send(404, {'error':'LAN feed has no management UI or draft API'})

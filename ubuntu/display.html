@@ -1,0 +1,17 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>Pi-FIDS V2 Ubuntu Display</title>
+<style>body{font:16px system-ui;max-width:52rem;margin:3rem auto;padding:0 1rem;line-height:1.6}pre{overflow:auto;background:#edf3f8;padding:1rem}section{border-top:1px solid #ccd}</style>
+<h1>Pi-FIDS V2 表示端末 / Ubuntu Display</h1>
+<section><h2>日本語</h2><ol>
+<li>Ubuntu 24.04 LTS Desktopの表示に使うアカウントでログインします。Python 3、tzdataとChromium、ChromeまたはEdgeが必要です。</li>
+<li>管理PCの <code>http://管理PCのLANアドレス:8805/downloads</code> からUbuntu版を取得し、展開します。</li>
+<li>管理者から端末専用の <code>connection.json</code> を受け取り、展開先で次を実行します。sudoは不要です。
+<pre>python3 install.py --connection /path/to/connection.json</pre></li>
+<li>今すぐ表示するには、インストーラーが表示したコマンドを実行します。再起動後は、同じユーザーでデスクトップにログインし、Kiosk画面と受信を確認します。受信サービスの状態は <code>systemctl --user status pi-fids-display</code> で確認できます。</li>
+</ol></section>
+<section lang="en"><h2>English</h2><ol>
+<li>Sign in to Ubuntu 24.04 LTS Desktop with the display account. Python 3, tzdata and Chromium, Chrome or Edge are required.</li>
+<li>Open <code>http://MANAGER-LAN-IP:8805/downloads</code> on the display PC. Download and extract the Ubuntu display kit.</li>
+<li>Obtain the terminal-specific <code>connection.json</code> from your administrator. Run this command from the extracted directory, without sudo:
+<pre>python3 install.py --connection /path/to/connection.json</pre></li>
+<li>To start the kiosk now, run the command printed by the installer. After restarting, sign in to the same desktop account and confirm kiosk startup and flight reception. To check the receiver service, run <code>systemctl --user status pi-fids-display</code>.</li>
+</ol></section></html>
